@@ -2,7 +2,13 @@ import { getFeaturedVenues } from '@/lib/db'
 import { VenueCard } from './venue-card'
 
 export async function FeaturedVenues() {
-  const featured = await getFeaturedVenues()
+  let featured
+  try {
+    featured = await getFeaturedVenues()
+  } catch (error) {
+    console.error('[v0] FeaturedVenues DB error:', error)
+    return null
+  }
 
   if (featured.length === 0) return null
 

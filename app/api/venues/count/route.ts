@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getVenueCount } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const count = await getVenueCount()

@@ -3,6 +3,8 @@ import { searchVenues, getAllVenues } from '@/lib/db'
 import { getBlendedRating } from '@/lib/data'
 import type { SearchResult } from '@/lib/types'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const lat = parseFloat(searchParams.get('lat') || '0')

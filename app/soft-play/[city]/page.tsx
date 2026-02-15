@@ -8,9 +8,15 @@ import { VenueCard } from '@/components/venue-card'
 import { PostcodeSearch } from '@/components/postcode-search'
 import { getCityPage, getVenuesByCity, getAllCityPages } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 export async function generateStaticParams() {
-  const pages = await getAllCityPages()
-  return pages.map((c) => ({ city: c.slug }))
+  try {
+    const pages = await getAllCityPages()
+    return pages.map((c) => ({ city: c.slug }))
+  } catch {
+    return []
+  }
 }
 
 export async function generateMetadata({

@@ -1,7 +1,23 @@
-import { neon } from '@neondatabase/serverless'
+import { neon, type NeonQueryFunction } from '@neondatabase/serverless'
 import type { Venue, VenueImage, Review, CityPage, OpeningHours, Amenity, SourceAttribution } from './types'
 
-const sql = neon(process.env.DATABASE_URL!)
+let _sql: NeonQueryFunction<false, false> | null = null
+
+function getSQL() {
+  if (!_sql) {
+    const url = process.env.DATABASE_URL
+    if (!url) {
+      throw new Error('DATABASE_URL environment variable is not set')
+    }
+    _sql = neon(url)
+  }
+  return _sql
+}
+
+// Re-export as `sql` for backward compat within this file
+function sql(strings: TemplateStringsArray, ...values: unknown[]) {
+  return getSQL()(strings, ...values)
+}
 
 // ─── Row → Venue Hydrator ──────────────────────────────────
 function hydrateVenue(
@@ -124,8 +140,7 @@ export async function getFeaturedVenues(): Promise<Venue[]> {
   const rows = await sql`
     SELECT * FROM venues
     WHERE status = 'active'
-      AND google_rating >= 4.5
-    ORDER BY google_rating DESC
+    ORDER BY COALESCE(google_rating, 0) DESC, name ASC
     LIMIT 6
   `
   const venues: Venue[] = []
