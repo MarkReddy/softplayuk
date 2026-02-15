@@ -243,3 +243,70 @@ export async function getAllVenueSlugs(): Promise<string[]> {
   const rows = await sql`SELECT slug FROM venues WHERE status = 'active'`
   return rows.map((r) => r.slug as string)
 }
+
+// ─── Paginated / Count Queries ─────────────────────────────
+
+export async function getVenueCount(): Promise<number> {
+  const rows = await sql`SELECT COUNT(*) as cnt FROM venues WHERE status = 'active'`
+  return Number(rows[0]?.cnt) || 0
+}
+
+export async function getVenuesPaginated(
+  limit: number,
+  offset: number,
+): Promise<{ venues: Venue[]; total: number }> {
+  const countRows = await sql`SELECT COUNT(*) as cnt FROM venues WHERE status = 'active'`
+  const total = Number(countRows[0]?.cnt) || 0
+
+  const rows = await sql`
+    SELECT * FROM venues WHERE status = 'active'
+    ORDER BY name ASC
+    LIMIT ${limit} OFFSET ${offset}
+  `
+
+  const venues: Venue[] = []
+  for (const row of rows) {
+    const { images, hours, sources } = await fetchVenueRelations(Number(row.id))
+    venues.push(hydrateVenue(row, images, hours, sources))
+  }
+
+  return { venues, total }
+}
+
+export async function searchVenuesByText(query: string): Promise<Venue[]> {
+  const pattern = `%${query}%`
+  const rows = await sql`
+    SELECT * FROM venues
+    WHERE status = 'active'
+      AND (
+        LOWER(name) LIKE LOWER(${pattern})
+        OR LOWER(city) LIKE LOWER(${pattern})
+        OR LOWER(postcode) LIKE LOWER(${pattern})
+        OR LOWER(address_line1) LIKE LOWER(${pattern})
+        OR LOWER(county) LIKE LOWER(${pattern})
+      )
+    ORDER BY name ASC
+    LIMIT 50
+  `
+
+  const venues: Venue[] = []
+  for (const row of rows) {
+    const { images, hours, sources } = await fetchVenueRelations(Number(row.id))
+    venues.push(hydrateVenue(row, images, hours, sources))
+  }
+  return venues
+}
+
+export async function checkDbHealth(): Promise<{ ok: boolean; venueCount: number; latestSync: string | null }> {
+  try {
+    const countRows = await sql`SELECT COUNT(*) as cnt FROM venues WHERE status = 'active'`
+    const syncRows = await sql`SELECT MAX(last_google_sync) as latest FROM venues`
+    return {
+      ok: true,
+      venueCount: Number(countRows[0]?.cnt) || 0,
+      latestSync: syncRows[0]?.latest ? String(syncRows[0].latest) : null,
+    }
+  } catch {
+    return { ok: false, venueCount: 0, latestSync: null }
+  }
+}
