@@ -14,6 +14,21 @@ export function VenueGallery({
   name: string
 }) {
   const [current, setCurrent] = useState(0)
+
+  // Guard against empty images array
+  if (!images || images.length === 0) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl">
+        <div className="relative flex aspect-[16/9] items-center justify-center bg-secondary md:aspect-[2/1]">
+          <div className="text-center">
+            <p className="text-lg font-medium text-muted-foreground">{name}</p>
+            <p className="text-sm text-muted-foreground/60">No photos yet</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const img = images[current]
 
   return (

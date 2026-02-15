@@ -169,10 +169,12 @@ export default async function VenueDetailPage({
                     ({totalReviews} reviews)
                   </span>
                 </div>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span>Cleanliness: {venue.cleanlinessScore}/5</span>
-                </div>
+                {venue.cleanlinessScore > 0 && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span>Cleanliness: {(venue.cleanlinessScore / 2).toFixed(1)}/5</span>
+                  </div>
+                )}
               </div>
 
               {/* Split ratings */}
@@ -182,9 +184,11 @@ export default async function VenueDetailPage({
                     Google {venue.googleRating.toFixed(1)} ({venue.googleReviewCount})
                   </span>
                 )}
-                <span className="rounded-full bg-secondary px-2.5 py-1">
-                  Parents {venue.firstPartyRating.toFixed(1)} ({venue.firstPartyReviewCount})
-                </span>
+                {venue.firstPartyReviewCount > 0 && (
+                  <span className="rounded-full bg-secondary px-2.5 py-1">
+                    Parents {venue.firstPartyRating.toFixed(1)} ({venue.firstPartyReviewCount})
+                  </span>
+                )}
               </div>
 
               {/* Address */}
@@ -273,18 +277,22 @@ export default async function VenueDetailPage({
               <div className="sticky top-20 space-y-4">
                 <div className="rounded-2xl border border-border bg-card p-5">
                   <div className="space-y-3">
-                    <Button asChild className="w-full rounded-xl" size="lg">
-                      <a href={`tel:${venue.phone}`}>
-                        <Phone className="h-4 w-4" />
-                        Call {venue.phone}
-                      </a>
-                    </Button>
-                    <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
-                      <a href={venue.website} target="_blank" rel="noopener noreferrer">
-                        <Globe className="h-4 w-4" />
-                        Visit website
-                      </a>
-                    </Button>
+                    {venue.phone && (
+                      <Button asChild className="w-full rounded-xl" size="lg">
+                        <a href={`tel:${venue.phone}`}>
+                          <Phone className="h-4 w-4" />
+                          Call {venue.phone}
+                        </a>
+                      </Button>
+                    )}
+                    {venue.website && (
+                      <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
+                        <a href={venue.website} target="_blank" rel="noopener noreferrer">
+                          <Globe className="h-4 w-4" />
+                          Visit website
+                        </a>
+                      </Button>
+                    )}
                     <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
                       <a
                         href={`https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`}
@@ -337,14 +345,16 @@ export default async function VenueDetailPage({
                   </div>
                 </div>
 
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Data last refreshed{' '}
-                  {new Date(venue.lastRefreshedAt).toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </p>
+                {venue.lastRefreshedAt && venue.lastRefreshedAt !== 'undefined' && (
+                  <p className="text-center text-[11px] text-muted-foreground">
+                    Data last refreshed{' '}
+                    {new Date(venue.lastRefreshedAt).toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </p>
+                )}
               </div>
             </aside>
           </div>
