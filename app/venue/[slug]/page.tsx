@@ -26,7 +26,7 @@ import { VenueGallery } from '@/components/venue-gallery'
 import { ReviewCard } from '@/components/review-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getVenueBySlug, getVenueReviews, getAllVenueSlugs } from '@/lib/db'
+import { getVenueBySlug, getVenueReviews } from '@/lib/db'
 import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel } from '@/lib/data'
 
 const amenityIconMap: Record<string, React.ReactNode> = {
@@ -40,15 +40,6 @@ const amenityIconMap: Record<string, React.ReactNode> = {
 }
 
 export const dynamic = 'force-dynamic'
-
-export async function generateStaticParams() {
-  try {
-    const slugs = await getAllVenueSlugs()
-    return slugs.map((slug) => ({ slug }))
-  } catch {
-    return []
-  }
-}
 
 export async function generateMetadata({
   params,
