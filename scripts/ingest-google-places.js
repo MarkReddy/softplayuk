@@ -1,8 +1,10 @@
 /**
- * Google Places API Ingestion Script
- * 
- * Fetches soft play venues from Google Places API (New) and upserts them
- * into the Neon database. Designed to be run periodically (e.g. weekly cron).
+ * Google Places API Ingestion Script -- UK-Wide Coverage
+ *
+ * Strategy: Covers the entire UK mainland using a grid of overlapping
+ * circles (16 km radius) across the bounding box of the UK.
+ * Each grid cell queries Google Places Nearby Search with pagination
+ * (next_page_token) to capture all results.
  *
  * Required env vars:
  *   DATABASE_URL          - Neon connection string
@@ -10,14 +12,6 @@
  *
  * Usage:
  *   node scripts/ingest-google-places.js
- *
- * What it does:
- *   1. For each city in the UK_CITIES list, searches Google Places API
- *      for "soft play" near the city centroid
- *   2. For each result, fetches full place details (hours, photos, reviews)
- *   3. Upserts the venue into the venues table (matched on google_place_id)
- *   4. Upserts images, opening hours, sources, and Google reviews
- *   5. Logs a summary of new vs updated venues
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -25,45 +19,43 @@ import { neon } from '@neondatabase/serverless';
 const DATABASE_URL = process.env.DATABASE_URL;
 const API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 
-if (!DATABASE_URL) {
-  console.error('Missing DATABASE_URL');
-  process.exit(1);
-}
-if (!API_KEY) {
-  console.error('Missing GOOGLE_PLACES_API_KEY');
-  console.error('Set it in your Vercel project environment variables.');
-  console.error('Get one from: https://console.cloud.google.com/apis/credentials');
-  process.exit(1);
-}
+if (!DATABASE_URL) { console.error('Missing DATABASE_URL'); process.exit(1); }
+if (!API_KEY) { console.error('Missing GOOGLE_PLACES_API_KEY'); process.exit(1); }
 
 const sql = neon(DATABASE_URL);
 
-// Cities to search -- add more as needed
-const UK_CITIES = [
-  { name: 'Manchester', lat: 53.4808, lng: -2.2426, county: 'Greater Manchester' },
-  { name: 'London', lat: 51.5074, lng: -0.1278, county: 'Greater London' },
-  { name: 'Birmingham', lat: 52.4862, lng: -1.8904, county: 'West Midlands' },
-  { name: 'Leeds', lat: 53.8008, lng: -1.5491, county: 'West Yorkshire' },
-  { name: 'Bristol', lat: 51.4545, lng: -2.5879, county: 'Avon' },
-  { name: 'Edinburgh', lat: 55.9533, lng: -3.1883, county: 'Midlothian' },
-  { name: 'Glasgow', lat: 55.8642, lng: -4.2518, county: 'Lanarkshire' },
-  { name: 'Liverpool', lat: 53.4084, lng: -2.9916, county: 'Merseyside' },
-  { name: 'Sheffield', lat: 53.3811, lng: -1.4701, county: 'South Yorkshire' },
-  { name: 'Newcastle', lat: 54.9783, lng: -1.6178, county: 'Tyne and Wear' },
-  { name: 'Nottingham', lat: 52.9548, lng: -1.1581, county: 'Nottinghamshire' },
-  { name: 'Cardiff', lat: 51.4816, lng: -3.1791, county: 'South Glamorgan' },
-];
+// ─── UK Bounding Box & Grid ─────────────────────────────────
+// Covers mainland GB + NI with generous padding
+const UK_BOUNDS = {
+  south: 49.9,   // south coast
+  north: 58.7,   // north Scotland
+  west: -8.2,    // west Ireland/Wales
+  east: 1.8,     // east coast
+};
 
-function slugify(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
+// 16 km radius search circles, with ~25 km step (overlap ensures no gaps)
+const SEARCH_RADIUS_M = 16000;
+const STEP_KM = 25;
+
+function generateGrid() {
+  const points = [];
+  const latStep = STEP_KM / 111; // 1 degree lat ~ 111 km
+  for (let lat = UK_BOUNDS.south; lat <= UK_BOUNDS.north; lat += latStep) {
+    const lngStep = STEP_KM / (111 * Math.cos(lat * Math.PI / 180));
+    for (let lng = UK_BOUNDS.west; lng <= UK_BOUNDS.east; lng += lngStep) {
+      points.push({ lat: Math.round(lat * 10000) / 10000, lng: Math.round(lng * 10000) / 10000 });
+    }
+  }
+  return points;
 }
 
-// ─── Google Places API (New) ─────────────────────────────────
+function slugify(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
 
-async function searchNearby(lat, lng) {
+// ─── Google Places API (New) with Pagination ─────────────────
+
+async function searchNearby(lat, lng, pageToken) {
   const url = 'https://places.googleapis.com/v1/places:searchNearby';
   const body = {
     includedTypes: ['amusement_center', 'indoor_playground'],
@@ -71,10 +63,13 @@ async function searchNearby(lat, lng) {
     locationRestriction: {
       circle: {
         center: { latitude: lat, longitude: lng },
-        radius: 16000, // 10 miles in meters
+        radius: SEARCH_RADIUS_M,
       },
     },
   };
+  if (pageToken) {
+    body.pageToken = pageToken;
+  }
 
   const res = await fetch(url, {
     method: 'POST',
@@ -95,6 +90,7 @@ async function searchNearby(lat, lng) {
         'places.reviews',
         'places.types',
         'places.addressComponents',
+        'nextPageToken',
       ].join(','),
     },
     body: JSON.stringify(body),
@@ -102,87 +98,106 @@ async function searchNearby(lat, lng) {
 
   if (!res.ok) {
     const err = await res.text();
-    console.error(`Google Places search failed:`, err);
-    return [];
+    console.error(`  Google Places search failed at (${lat},${lng}):`, err.substring(0, 200));
+    return { places: [], nextPageToken: null };
   }
 
   const data = await res.json();
-  return data.places || [];
+  return {
+    places: data.places || [],
+    nextPageToken: data.nextPageToken || null,
+  };
 }
+
+// Fetch ALL results for a grid point (follow pagination)
+async function searchAllPages(lat, lng) {
+  const allPlaces = [];
+  let pageToken = null;
+  let page = 0;
+
+  do {
+    if (page > 0) {
+      // Google requires a short delay before using next_page_token
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    const result = await searchNearby(lat, lng, pageToken);
+    allPlaces.push(...result.places);
+    pageToken = result.nextPageToken;
+    page++;
+  } while (pageToken && page < 5); // max 5 pages = 100 results per cell
+
+  return allPlaces;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
 
 function extractCity(addressComponents) {
   if (!addressComponents) return null;
   const cityComp = addressComponents.find(
-    (c) =>
-      c.types?.includes('postal_town') ||
-      c.types?.includes('locality')
+    c => c.types?.includes('postal_town') || c.types?.includes('locality')
   );
   return cityComp?.longText || null;
 }
 
+function extractCounty(addressComponents) {
+  if (!addressComponents) return null;
+  const comp = addressComponents.find(c => c.types?.includes('administrative_area_level_2'));
+  return comp?.longText || null;
+}
+
 function extractPostcode(addressComponents) {
   if (!addressComponents) return null;
-  const pc = addressComponents.find((c) => c.types?.includes('postal_code'));
+  const pc = addressComponents.find(c => c.types?.includes('postal_code'));
   return pc?.longText || null;
 }
 
-function mapPriceRange(types) {
-  // Simple heuristic -- override manually if needed
-  if (types?.includes('amusement_park')) return 'premium';
-  return 'mid';
+function isSoftPlayVenue(place) {
+  const name = (place.displayName?.text || '').toLowerCase();
+  const keywords = ['play', 'soft', 'bounce', 'adventure', 'jungle', 'kids',
+    'children', 'toddler', 'fun', 'trampoline', 'climb', 'party', 'foam'];
+  const nameMatch = keywords.some(k => name.includes(k));
+  const typeMatch = (place.types || []).some(t =>
+    ['indoor_playground', 'amusement_center'].includes(t)
+  );
+  return nameMatch || typeMatch;
 }
 
 // ─── Upsert Logic ────────────────────────────────────────────
 
-async function upsertVenue(place, cityInfo) {
+async function upsertVenue(place) {
   const name = place.displayName?.text || 'Unknown Venue';
-  const slug = slugify(`${name}-${cityInfo.name}`);
   const placeId = place.id;
   const lat = place.location?.latitude;
   const lng = place.location?.longitude;
   const address = place.formattedAddress || '';
-  const city = extractCity(place.addressComponents) || cityInfo.name;
+  const city = extractCity(place.addressComponents) || 'Unknown';
+  const county = extractCounty(place.addressComponents) || '';
   const postcode = extractPostcode(place.addressComponents) || '';
   const phone = place.nationalPhoneNumber || '';
   const website = place.websiteUri || '';
   const googleRating = place.rating || null;
   const googleReviewCount = place.userRatingCount || 0;
-  const priceRange = mapPriceRange(place.types);
+  const slug = slugify(`${name}-${city}`);
 
-  // Check for "soft play" keywords in name to filter false positives
-  const nameLower = name.toLowerCase();
-  const isSoftPlay =
-    nameLower.includes('play') ||
-    nameLower.includes('soft') ||
-    nameLower.includes('bounce') ||
-    nameLower.includes('adventure') ||
-    nameLower.includes('jungle') ||
-    nameLower.includes('kids') ||
-    nameLower.includes('children') ||
-    nameLower.includes('toddler') ||
-    nameLower.includes('fun') ||
-    (place.types || []).includes('indoor_playground');
-
-  if (!isSoftPlay) {
-    console.log(`  Skipping "${name}" (doesn't appear to be soft play)`);
-    return null;
+  if (!isSoftPlayVenue(place)) {
+    return { skipped: true, name };
   }
 
-  // Upsert venue
   const result = await sql`
     INSERT INTO venues (
       slug, name, description, address_line1, city, county, postcode, country,
       lat, lng, phone, website, google_place_id, google_rating, google_review_count,
       price_range, status, last_google_sync, updated_at
     ) VALUES (
-      ${slug}, ${name}, ${''}, ${address}, ${city}, ${cityInfo.county}, ${postcode}, 'GB',
+      ${slug}, ${name}, ${''}, ${address}, ${city}, ${county}, ${postcode}, 'GB',
       ${lat}, ${lng}, ${phone}, ${website}, ${placeId}, ${googleRating}, ${googleReviewCount},
-      ${priceRange}, 'active', now(), now()
+      'mid', 'active', now(), now()
     )
     ON CONFLICT (google_place_id) DO UPDATE SET
       name = EXCLUDED.name,
       address_line1 = EXCLUDED.address_line1,
       city = EXCLUDED.city,
+      county = EXCLUDED.county,
       postcode = EXCLUDED.postcode,
       lat = EXCLUDED.lat,
       lng = EXCLUDED.lng,
@@ -197,9 +212,8 @@ async function upsertVenue(place, cityInfo) {
 
   const venueId = result[0].id;
   const isNew = result[0].is_new;
-  console.log(`  ${isNew ? 'NEW' : 'UPDATED'}: ${name} (id=${venueId})`);
 
-  // Upsert source record
+  // Upsert source
   await sql`
     INSERT INTO venue_sources (venue_id, source_type, source_id, last_fetched_at, raw_data)
     VALUES (${venueId}, 'google_places', ${placeId}, now(), ${JSON.stringify(place)}::jsonb)
@@ -216,23 +230,18 @@ async function upsertVenue(place, cityInfo) {
       const closeTime = period.close?.hour != null
         ? `${String(period.close.hour).padStart(2, '0')}:${String(period.close.minute || 0).padStart(2, '0')}`
         : null;
-
       await sql`
         INSERT INTO venue_opening_hours (venue_id, day_of_week, open_time, close_time, is_closed)
         VALUES (${venueId}, ${dayOfWeek}, ${openTime}, ${closeTime}, ${!openTime})
         ON CONFLICT (venue_id, day_of_week) DO UPDATE SET
-          open_time = EXCLUDED.open_time,
-          close_time = EXCLUDED.close_time,
-          is_closed = EXCLUDED.is_closed
+          open_time = EXCLUDED.open_time, close_time = EXCLUDED.close_time, is_closed = EXCLUDED.is_closed
       `;
     }
   }
 
   // Insert Google photos (first 5)
   if (place.photos?.length) {
-    // Delete old Google photos for this venue
     await sql`DELETE FROM venue_images WHERE venue_id = ${venueId} AND source = 'google'`;
-
     for (const photo of place.photos.slice(0, 5)) {
       const photoUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=1200&key=${API_KEY}`;
       const attribution = photo.authorAttributions?.[0]?.displayName || 'Google';
@@ -241,26 +250,20 @@ async function upsertVenue(place, cityInfo) {
         VALUES (${venueId}, ${photoUrl}, 'google', ${attribution}, false)
       `;
     }
-
-    // Mark first image as primary if no primary exists
     await sql`
       UPDATE venue_images SET is_primary = true
-      WHERE id = (
-        SELECT id FROM venue_images WHERE venue_id = ${venueId} ORDER BY id ASC LIMIT 1
-      ) AND NOT EXISTS (
-        SELECT 1 FROM venue_images WHERE venue_id = ${venueId} AND is_primary = true
-      )
+      WHERE id = (SELECT id FROM venue_images WHERE venue_id = ${venueId} ORDER BY id ASC LIMIT 1)
+      AND NOT EXISTS (SELECT 1 FROM venue_images WHERE venue_id = ${venueId} AND is_primary = true)
     `;
   }
 
-  // Insert Google reviews
+  // Insert Google reviews (first 5)
   if (place.reviews?.length) {
     for (const review of place.reviews.slice(0, 5)) {
       const authorName = review.authorAttribution?.displayName || 'Google User';
       const rating = review.rating || 0;
       const body = review.text?.text || '';
       const googleReviewId = review.name || `${placeId}_${authorName}`;
-
       await sql`
         INSERT INTO reviews (venue_id, source, author_name, rating, body, google_review_id, created_at)
         VALUES (${venueId}, 'google', ${authorName}, ${rating}, ${body}, ${googleReviewId}, now())
@@ -269,71 +272,99 @@ async function upsertVenue(place, cityInfo) {
     }
   }
 
-  return { venueId, isNew, name };
+  return { skipped: false, isNew, name, venueId };
+}
+
+// ─── Auto-Generate City Pages ────────────────────────────────
+
+async function generateCityPages() {
+  console.log('\nGenerating city pages from venue data...');
+  const cities = await sql`
+    SELECT city, county, AVG(lat) as lat, AVG(lng) as lng, COUNT(*) as cnt
+    FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != 'Unknown'
+    GROUP BY city, county
+    HAVING COUNT(*) >= 1
+    ORDER BY COUNT(*) DESC
+  `;
+
+  let created = 0;
+  for (const c of cities) {
+    const slug = slugify(c.city);
+    const desc = `Discover the best soft play centres in ${c.city}. Browse parent reviews, compare facilities, and find the perfect play centre for your children.`;
+    await sql`
+      INSERT INTO city_pages (slug, name, county, lat, lng, description, venue_count)
+      VALUES (${slug}, ${c.city}, ${c.county || ''}, ${c.lat}, ${c.lng}, ${desc}, ${Number(c.cnt)})
+      ON CONFLICT (slug) DO UPDATE SET
+        venue_count = EXCLUDED.venue_count,
+        lat = EXCLUDED.lat,
+        lng = EXCLUDED.lng
+    `;
+    created++;
+  }
+  console.log(`  Created/updated ${created} city pages`);
 }
 
 // ─── Main ────────────────────────────────────────────────────
 
 async function main() {
-  console.log('=== Google Places Ingestion Starting ===');
-  console.log(`Searching ${UK_CITIES.length} cities for soft play venues...\n`);
+  const grid = generateGrid();
+  console.log('=== UK-Wide Google Places Ingestion ===');
+  console.log(`Grid cells: ${grid.length}`);
+  console.log(`Search radius: ${SEARCH_RADIUS_M / 1000} km per cell`);
+  console.log(`Step: ${STEP_KM} km\n`);
 
+  const seenPlaceIds = new Set();
   let totalNew = 0;
   let totalUpdated = 0;
   let totalSkipped = 0;
+  let cellsProcessed = 0;
 
-  for (const city of UK_CITIES) {
-    console.log(`\nSearching: ${city.name}...`);
-    const places = await searchNearby(city.lat, city.lng);
-    console.log(`  Found ${places.length} results`);
+  for (const point of grid) {
+    cellsProcessed++;
+    if (cellsProcessed % 50 === 0) {
+      console.log(`  Progress: ${cellsProcessed}/${grid.length} cells (${Math.round(cellsProcessed / grid.length * 100)}%)`);
+    }
+
+    const places = await searchAllPages(point.lat, point.lng);
 
     for (const place of places) {
-      const result = await upsertVenue(place, city);
-      if (result === null) {
-        totalSkipped++;
-      } else if (result.isNew) {
-        totalNew++;
-      } else {
-        totalUpdated++;
+      // Deduplicate across grid cells
+      if (seenPlaceIds.has(place.id)) continue;
+      seenPlaceIds.add(place.id);
+
+      try {
+        const result = await upsertVenue(place);
+        if (result.skipped) {
+          totalSkipped++;
+        } else if (result.isNew) {
+          totalNew++;
+          console.log(`  NEW: ${result.name}`);
+        } else {
+          totalUpdated++;
+        }
+      } catch (err) {
+        console.error(`  Error upserting ${place.displayName?.text}:`, err.message);
       }
     }
 
-    // Also upsert city page
-    await sql`
-      INSERT INTO city_pages (slug, name, county, lat, lng, description, venue_count)
-      VALUES (
-        ${slugify(city.name)}, ${city.name}, ${city.county},
-        ${city.lat}, ${city.lng},
-        ${'Discover the best soft play centres in ' + city.name + '. Browse parent reviews, compare facilities, and find the perfect play centre for your children.'},
-        0
-      )
-      ON CONFLICT (slug) DO NOTHING
-    `;
-
-    // Rate limit -- Google allows 10 QPS, be conservative
-    await new Promise((r) => setTimeout(r, 500));
+    // Rate limit: ~5 QPS to Google
+    await new Promise(r => setTimeout(r, 200));
   }
 
-  // Update venue counts on city pages
-  await sql`
-    UPDATE city_pages SET venue_count = (
-      SELECT COUNT(*) FROM venues
-      WHERE LOWER(venues.city) = LOWER(city_pages.name)
-        AND venues.status = 'active'
-    )
-  `;
+  // Auto-generate city pages from venue data
+  await generateCityPages();
 
+  const counts = await sql`SELECT COUNT(*) as total FROM venues WHERE status = 'active'`;
   console.log('\n=== Ingestion Complete ===');
+  console.log(`Grid cells processed: ${cellsProcessed}`);
+  console.log(`Unique place IDs seen: ${seenPlaceIds.size}`);
   console.log(`New venues: ${totalNew}`);
   console.log(`Updated venues: ${totalUpdated}`);
   console.log(`Skipped (not soft play): ${totalSkipped}`);
-
-  // Show final counts
-  const counts = await sql`SELECT COUNT(*) as total FROM venues WHERE status = 'active'`;
   console.log(`Total active venues in database: ${counts[0].total}`);
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error('Ingestion failed:', err);
   process.exit(1);
 });

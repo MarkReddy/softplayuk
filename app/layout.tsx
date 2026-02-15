@@ -12,8 +12,8 @@ const nunito = Nunito({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Softplay UK - Find the Best Soft Play Centres Near You',
-    template: '%s | Softplay UK',
+    default: "UK's #1 Soft Play Finder",
+    template: "%s | UK's #1 Soft Play Finder",
   },
   description:
     'Discover the best soft play centres for kids across the UK. Trusted reviews, real parent insights, postcode search. Find safe, clean, fun play centres near you.',
