@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    /* Warm cream / pale oat background */
+    --background: 34 40% 96%;
+    --foreground: 25 15% 22%;
+
+    /* Card: slightly warmer than background */
+    --card: 36 50% 98%;
+    --card-foreground: 25 15% 22%;
+
+    --popover: 36 50% 98%;
+    --popover-foreground: 25 15% 22%;
+
+    /* Primary: warm terracotta / clay */
+    --primary: 16 50% 52%;
+    --primary-foreground: 36 50% 98%;
+
+    /* Secondary: soft peach wash */
+    --secondary: 28 45% 93%;
+    --secondary-foreground: 25 15% 22%;
+
+    /* Muted: warm stone */
+    --muted: 30 25% 91%;
+    --muted-foreground: 25 10% 48%;
+
+    /* Accent: soft sage green */
+    --accent: 148 25% 48%;
+    --accent-foreground: 36 50% 98%;
+
+    --destructive: 0 60% 48%;
+    --destructive-foreground: 36 50% 98%;
+
+    /* Warm, soft borders */
+    --border: 30 20% 87%;
+    --input: 30 20% 87%;
+    --ring: 16 50% 52%;
+
+    --chart-1: 16 50% 52%;
+    --chart-2: 148 25% 48%;
+    --chart-3: 28 45% 65%;
+    --chart-4: 340 30% 65%;
+    --chart-5: 200 25% 55%;
+
+    /* Bigger radius for organic feel */
+    --radius: 1rem;
+
+    --sidebar-background: 34 40% 96%;
+    --sidebar-foreground: 25 15% 22%;
+    --sidebar-primary: 16 50% 52%;
+    --sidebar-primary-foreground: 36 50% 98%;
+    --sidebar-accent: 28 45% 93%;
+    --sidebar-accent-foreground: 25 15% 22%;
+    --sidebar-border: 30 20% 87%;
+    --sidebar-ring: 16 50% 52%;
+
+    /* Custom tokens for pastel washes */
+    --wash-peach: 20 60% 94%;
+    --wash-clay: 16 35% 92%;
+    --wash-lavender: 260 30% 94%;
+    --wash-sage: 148 25% 93%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Organic blob backgrounds via CSS */
+@layer utilities {
+  .blob-shape {
+    border-radius: 42% 58% 62% 38% / 45% 55% 45% 55%;
+  }
+  .blob-shape-2 {
+    border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%;
+  }
+}
