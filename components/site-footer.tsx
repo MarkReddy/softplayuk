@@ -1,17 +1,24 @@
 'use client'
 
 import Link from 'next/link'
+import useSWR from 'swr'
 
-const cities = [
-  { name: 'Manchester', slug: 'manchester' },
-  { name: 'London', slug: 'london' },
-  { name: 'Birmingham', slug: 'birmingham' },
-  { name: 'Leeds', slug: 'leeds' },
-  { name: 'Bristol', slug: 'bristol' },
-  { name: 'Edinburgh', slug: 'edinburgh' },
-]
+interface CityResult {
+  city: string
+  slug: string
+}
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export function SiteFooter() {
+  const { data } = useSWR<{ cities: CityResult[] }>(
+    '/api/cities?limit=12',
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+
+  const cities = data?.cities ?? []
+
   return (
     <footer className="border-t border-border/50 bg-card/50">
       <div className="mx-auto max-w-5xl px-5 py-14">
@@ -36,16 +43,20 @@ export function SiteFooter() {
               Popular Cities
             </h3>
             <ul className="flex flex-col gap-2.5">
-              {cities.map((city) => (
-                <li key={city.slug}>
-                  <Link
-                    href={`/soft-play/${city.slug}`}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    Soft Play in {city.name}
-                  </Link>
-                </li>
-              ))}
+              {cities.length === 0 ? (
+                <li className="text-sm text-muted-foreground">Loading cities...</li>
+              ) : (
+                cities.map((city) => (
+                  <li key={city.slug}>
+                    <Link
+                      href={`/soft-play/${city.slug}`}
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Soft Play in {city.city}
+                    </Link>
+                  </li>
+                ))
+              )}
             </ul>
           </div>
 

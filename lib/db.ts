@@ -312,6 +312,44 @@ export async function searchVenuesByText(query: string): Promise<Venue[]> {
   return venues
 }
 
+export async function getAllDistinctCities(
+  limit?: number,
+  offset?: number,
+): Promise<{ total: number; cities: { city: string; region: string | null; country: string | null; slug: string }[] }> {
+  const countRows = await sql`
+    SELECT COUNT(DISTINCT LOWER(city)) as cnt FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != ''
+  `
+  const total = Number(countRows[0]?.cnt) || 0
+
+  const safeLimit = Math.min(limit || 20000, 20000)
+  const safeOffset = offset || 0
+
+  const rows = await sql`
+    SELECT
+      city,
+      MIN(county) as region,
+      'United Kingdom' as country,
+      LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug,
+      COUNT(*) as venue_count
+    FROM venues
+    WHERE status = 'active' AND city IS NOT NULL AND city != ''
+    GROUP BY city
+    ORDER BY city ASC
+    LIMIT ${safeLimit} OFFSET ${safeOffset}
+  `
+
+  return {
+    total,
+    cities: rows.map((r) => ({
+      city: r.city as string,
+      region: r.region as string | null,
+      country: r.country as string | null,
+      slug: r.slug as string,
+      venueCount: Number(r.venue_count) || 0,
+    })),
+  }
+}
+
 export async function checkDbHealth(): Promise<{ ok: boolean; venueCount: number; latestSync: string | null }> {
   try {
     const countRows = await sql`SELECT COUNT(*) as cnt FROM venues WHERE status = 'active'`
