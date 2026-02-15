@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server'
-import { verifyAdmin } from '@/lib/admin-auth'
-import { getAllRuns } from '@/lib/backfill/engine'
+import { requireAdmin } from '@/lib/admin-auth'
+import { listRuns } from '@/lib/backfill/engine'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const authError = verifyAdmin(request)
+  const authError = requireAdmin(request)
   if (authError) return authError
 
   try {
-    const runs = await getAllRuns()
+    const runs = await listRuns(50)
     return NextResponse.json({ runs })
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { error: err instanceof Error ? err.message : 'Failed to list runs' },
       { status: 500 },
     )
   }

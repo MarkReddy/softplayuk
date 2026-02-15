@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { verifyAdmin } from '@/lib/admin-auth'
-import { getRun, getRunVenues } from '@/lib/backfill/engine'
+import { requireAdmin } from '@/lib/admin-auth'
+import { getRunProgress, getRunVenues } from '@/lib/backfill/engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +8,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const authError = verifyAdmin(request)
+  const authError = requireAdmin(request)
   if (authError) return authError
 
   const { id } = await params
@@ -18,17 +18,13 @@ export async function GET(
   }
 
   try {
-    const run = await getRun(runId)
-    if (!run) {
-      return NextResponse.json({ error: 'Run not found' }, { status: 404 })
-    }
+    const progress = await getRunProgress(runId)
+    const venueLog = await getRunVenues(runId)
 
-    const venues = await getRunVenues(runId)
-
-    return NextResponse.json({ run, venues })
+    return NextResponse.json({ progress, venueLog })
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { error: err instanceof Error ? err.message : 'Run not found' },
       { status: 500 },
     )
   }

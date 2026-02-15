@@ -27,3 +27,6 @@ export function verifyAdmin(request: Request): NextResponse | null {
 
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }
+
+// Alias for consistency
+export const requireAdmin = verifyAdmin
