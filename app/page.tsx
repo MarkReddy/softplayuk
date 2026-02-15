@@ -31,7 +31,7 @@ export default function HomePage() {
               </p>
               <PostcodeSearch size="lg" />
               <p className="mt-4 text-xs text-muted-foreground/70">
-                Try: SW1A 1AA, M1 1AA, LS1 6PU, BS1 1AA
+                Enter any UK postcode to find soft play centres nearby
               </p>
             </div>
 
