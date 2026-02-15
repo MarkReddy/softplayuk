@@ -3,26 +3,31 @@
 import Link from 'next/link'
 import useSWR from 'swr'
 
-interface CityResult {
-  city: string
-  slug: string
-}
+interface CityResult { city: string; slug: string }
+interface RegionResult { region: string; slug: string }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export function SiteFooter() {
-  const { data } = useSWR<{ cities: CityResult[] }>(
-    '/api/cities?limit=12',
+  const { data: citiesData } = useSWR<{ cities: CityResult[] }>(
+    '/api/cities?limit=8',
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const { data: regionsData } = useSWR<{ regions: RegionResult[] }>(
+    '/api/regions',
     fetcher,
     { revalidateOnFocus: false },
   )
 
-  const cities = data?.cities ?? []
+  const cities = citiesData?.cities ?? []
+  const regions = (regionsData?.regions ?? []).slice(0, 8)
 
   return (
     <footer className="border-t border-border/50 bg-card/50">
       <div className="mx-auto max-w-5xl px-5 py-14">
-        <div className="grid gap-10 md:grid-cols-3">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Brand */}
           <div>
             <Link href="/" className="mb-4 flex items-baseline gap-1.5">
               <span className="text-lg font-bold tracking-tight text-foreground">
@@ -38,13 +43,42 @@ export function SiteFooter() {
             </p>
           </div>
 
+          {/* Popular Regions */}
+          <div>
+            <h3 className="mb-4 text-sm font-semibold text-foreground">
+              Popular Regions
+            </h3>
+            <ul className="flex flex-col gap-2.5">
+              {regions.length === 0 ? (
+                <li className="text-sm text-muted-foreground">Loading...</li>
+              ) : (
+                regions.map((r) => (
+                  <li key={r.slug}>
+                    <Link
+                      href={`/regions/${r.slug}`}
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      {r.region}
+                    </Link>
+                  </li>
+                ))
+              )}
+              <li>
+                <Link href="/regions" className="text-sm font-medium text-primary hover:underline">
+                  All regions
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Popular Cities */}
           <div>
             <h3 className="mb-4 text-sm font-semibold text-foreground">
               Popular Cities
             </h3>
             <ul className="flex flex-col gap-2.5">
               {cities.length === 0 ? (
-                <li className="text-sm text-muted-foreground">Loading cities...</li>
+                <li className="text-sm text-muted-foreground">Loading...</li>
               ) : (
                 cities.map((city) => (
                   <li key={city.slug}>
@@ -60,6 +94,7 @@ export function SiteFooter() {
             </ul>
           </div>
 
+          {/* Info + Legal */}
           <div>
             <h3 className="mb-4 text-sm font-semibold text-foreground">
               Information
@@ -67,23 +102,13 @@ export function SiteFooter() {
             <ul className="flex flex-col gap-2.5">
               <li>
                 <Link href="/search" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                  Explore All Venues
+                  Search Venues
                 </Link>
               </li>
               <li>
-                <span className="text-sm text-muted-foreground">
-                  Add Your Venue
-                </span>
-              </li>
-              <li>
-                <span className="text-sm text-muted-foreground">
-                  About Us
-                </span>
-              </li>
-              <li>
-                <span className="text-sm text-muted-foreground">
-                  Contact
-                </span>
+                <Link href="/regions" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  Browse by Region
+                </Link>
               </li>
             </ul>
 

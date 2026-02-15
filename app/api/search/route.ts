@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const senFriendly = searchParams.get('senFriendly')
   const hasParking = searchParams.get('hasParking')
   const hasCafe = searchParams.get('hasCafe')
+  const region = searchParams.get('region')
 
   try {
     let results: SearchResult[]
@@ -27,6 +28,15 @@ export async function GET(request: Request) {
     } else {
       // Distance-based search from Neon (Haversine in SQL)
       results = await searchVenues(lat, lng, radius)
+    }
+
+    // Region filter
+    if (region) {
+      const regionSlug = region.toLowerCase()
+      results = results.filter((v) => {
+        const venueRegionSlug = (v.area || '').toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')
+        return venueRegionSlug === regionSlug
+      })
     }
 
     // Apply client-side filters on the hydrated results

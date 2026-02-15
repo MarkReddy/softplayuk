@@ -62,7 +62,26 @@ export default async function CityPage({
               </Link>
             </li>
             <li><ChevronRight className="h-3.5 w-3.5" /></li>
-            <li className="font-medium text-foreground">Soft Play in {page.city}</li>
+            <li>
+              <Link href="/regions" className="transition-colors hover:text-foreground">
+                Regions
+              </Link>
+            </li>
+            {page.area && (
+              <>
+                <li><ChevronRight className="h-3.5 w-3.5" /></li>
+                <li>
+                  <Link
+                    href={`/regions/${page.area.toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')}`}
+                    className="transition-colors hover:text-foreground"
+                  >
+                    {page.area}
+                  </Link>
+                </li>
+              </>
+            )}
+            <li><ChevronRight className="h-3.5 w-3.5" /></li>
+            <li className="font-medium text-foreground">{page.city}</li>
           </ol>
         </nav>
 

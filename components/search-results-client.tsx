@@ -22,6 +22,7 @@ export function SearchResultsClient() {
   const [priceBand, setPriceBand] = useState('all')
   const [radius, setRadius] = useState('100')
   const [senOnly, setSenOnly] = useState(false)
+  const [region, setRegion] = useState('all')
 
   const params = new URLSearchParams()
   if (lat) params.set('lat', lat)
@@ -31,6 +32,7 @@ export function SearchResultsClient() {
   if (ageGroup !== 'all') params.set('ageGroup', ageGroup)
   if (priceBand !== 'all') params.set('priceBand', priceBand)
   if (senOnly) params.set('senFriendly', 'true')
+  if (region !== 'all') params.set('region', region)
 
   const { data: results, isLoading } = useSWR<SearchResult[]>(
     `/api/search?${params.toString()}`,
@@ -48,7 +50,7 @@ export function SearchResultsClient() {
         <p className="text-muted-foreground">
           {postcode
             ? 'Sorted by what matters most to parents. Ratings blend Google reviews with first-hand parent reports.'
-            : 'Enter your postcode to find venues near you'}
+            : 'Enter your postcode to find venues near you, or browse by region.'}
         </p>
       </div>
 
@@ -66,15 +68,18 @@ export function SearchResultsClient() {
             priceBand={priceBand}
             radius={radius}
             senOnly={senOnly}
+            region={region}
             onSortChange={setSortBy}
             onAgeChange={setAgeGroup}
             onPriceChange={setPriceBand}
             onRadiusChange={setRadius}
             onSenToggle={() => setSenOnly((prev) => !prev)}
+            onRegionChange={setRegion}
             onClearFilters={() => {
               setAgeGroup('all')
               setPriceBand('all')
               setSenOnly(false)
+              setRegion('all')
             }}
           />
         </div>

@@ -315,28 +315,54 @@ export async function searchVenuesByText(query: string): Promise<Venue[]> {
 export async function getAllDistinctCities(
   limit?: number,
   offset?: number,
-): Promise<{ total: number; cities: { city: string; region: string | null; country: string | null; slug: string }[] }> {
-  const countRows = await sql`
-    SELECT COUNT(DISTINCT LOWER(city)) as cnt FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != ''
-  `
-  const total = Number(countRows[0]?.cnt) || 0
+  region?: string,
+): Promise<{ total: number; cities: { city: string; region: string | null; country: string | null; slug: string; venueCount: number }[] }> {
+  let countRows
+  let rows
 
   const safeLimit = Math.min(limit || 20000, 20000)
   const safeOffset = offset || 0
 
-  const rows = await sql`
-    SELECT
-      city,
-      MIN(county) as region,
-      'United Kingdom' as country,
-      LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug,
-      COUNT(*) as venue_count
-    FROM venues
-    WHERE status = 'active' AND city IS NOT NULL AND city != ''
-    GROUP BY city
-    ORDER BY city ASC
-    LIMIT ${safeLimit} OFFSET ${safeOffset}
-  `
+  if (region) {
+    countRows = await sql`
+      SELECT COUNT(DISTINCT LOWER(city)) as cnt FROM venues
+      WHERE status = 'active' AND city IS NOT NULL AND city != ''
+        AND LOWER(REPLACE(REPLACE(COALESCE(county, ''), ' ', '-'), '''', '')) = ${region}
+    `
+    rows = await sql`
+      SELECT
+        city,
+        MIN(county) as region,
+        'United Kingdom' as country,
+        LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug,
+        COUNT(*) as venue_count
+      FROM venues
+      WHERE status = 'active' AND city IS NOT NULL AND city != ''
+        AND LOWER(REPLACE(REPLACE(COALESCE(county, ''), ' ', '-'), '''', '')) = ${region}
+      GROUP BY city
+      ORDER BY venue_count DESC, city ASC
+      LIMIT ${safeLimit} OFFSET ${safeOffset}
+    `
+  } else {
+    countRows = await sql`
+      SELECT COUNT(DISTINCT LOWER(city)) as cnt FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != ''
+    `
+    rows = await sql`
+      SELECT
+        city,
+        MIN(county) as region,
+        'United Kingdom' as country,
+        LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug,
+        COUNT(*) as venue_count
+      FROM venues
+      WHERE status = 'active' AND city IS NOT NULL AND city != ''
+      GROUP BY city
+      ORDER BY venue_count DESC, city ASC
+      LIMIT ${safeLimit} OFFSET ${safeOffset}
+    `
+  }
+
+  const total = Number(countRows[0]?.cnt) || 0
 
   return {
     total,
@@ -348,6 +374,96 @@ export async function getAllDistinctCities(
       venueCount: Number(r.venue_count) || 0,
     })),
   }
+}
+
+// ─── Region Queries ────────────────────────────────────────
+
+export async function getAllRegions(): Promise<{ region: string; slug: string; venueCount: number; cityCount: number }[]> {
+  const rows = await sql`
+    SELECT
+      county as region,
+      LOWER(REPLACE(REPLACE(COALESCE(county, 'unknown'), ' ', '-'), '''', '')) as slug,
+      COUNT(*) as venue_count,
+      COUNT(DISTINCT city) as city_count
+    FROM venues
+    WHERE status = 'active' AND county IS NOT NULL AND county != ''
+    GROUP BY county
+    ORDER BY county ASC
+  `
+  return rows.map((r) => ({
+    region: r.region as string,
+    slug: r.slug as string,
+    venueCount: Number(r.venue_count) || 0,
+    cityCount: Number(r.city_count) || 0,
+  }))
+}
+
+export async function getRegionDetail(regionSlug: string): Promise<{
+  region: string
+  venueCount: number
+  cityCount: number
+  cities: { city: string; slug: string; venueCount: number }[]
+} | null> {
+  // Find the region name from the slug
+  const regionRows = await sql`
+    SELECT DISTINCT county FROM venues
+    WHERE status = 'active'
+      AND LOWER(REPLACE(REPLACE(COALESCE(county, ''), ' ', '-'), '''', '')) = ${regionSlug}
+    LIMIT 1
+  `
+  if (regionRows.length === 0) return null
+  const regionName = regionRows[0].county as string
+
+  const countRow = await sql`
+    SELECT COUNT(*) as cnt FROM venues WHERE status = 'active' AND county = ${regionName}
+  `
+
+  const cityRows = await sql`
+    SELECT
+      city,
+      LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug,
+      COUNT(*) as venue_count
+    FROM venues
+    WHERE status = 'active' AND county = ${regionName} AND city IS NOT NULL AND city != ''
+    GROUP BY city
+    ORDER BY venue_count DESC, city ASC
+  `
+
+  return {
+    region: regionName,
+    venueCount: Number(countRow[0]?.cnt) || 0,
+    cityCount: cityRows.length,
+    cities: cityRows.map((r) => ({
+      city: r.city as string,
+      slug: r.slug as string,
+      venueCount: Number(r.venue_count) || 0,
+    })),
+  }
+}
+
+export async function getVenuesByRegion(regionSlug: string, limit = 50): Promise<Venue[]> {
+  const regionRows = await sql`
+    SELECT DISTINCT county FROM venues
+    WHERE status = 'active'
+      AND LOWER(REPLACE(REPLACE(COALESCE(county, ''), ' ', '-'), '''', '')) = ${regionSlug}
+    LIMIT 1
+  `
+  if (regionRows.length === 0) return []
+  const regionName = regionRows[0].county as string
+
+  const rows = await sql`
+    SELECT * FROM venues
+    WHERE status = 'active' AND county = ${regionName}
+    ORDER BY COALESCE(google_rating, 0) DESC, name ASC
+    LIMIT ${limit}
+  `
+
+  const venues: Venue[] = []
+  for (const row of rows) {
+    const { images, hours, sources } = await fetchVenueRelations(Number(row.id))
+    venues.push(hydrateVenue(row, images, hours, sources))
+  }
+  return venues
 }
 
 export async function checkDbHealth(): Promise<{ ok: boolean; venueCount: number; latestSync: string | null }> {

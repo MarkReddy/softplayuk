@@ -8,11 +8,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const limitParam = searchParams.get('limit')
     const offsetParam = searchParams.get('offset')
+    const regionParam = searchParams.get('region') || undefined
 
     const limit = limitParam ? Math.max(1, Math.min(20000, Number(limitParam))) : undefined
     const offset = offsetParam ? Math.max(0, Number(offsetParam)) : undefined
 
-    const { total, cities } = await getAllDistinctCities(limit, offset)
+    const { total, cities } = await getAllDistinctCities(limit, offset, regionParam)
 
     return NextResponse.json(
       { total, returned: cities.length, cities },

@@ -92,7 +92,7 @@ export default async function VenueDetailPage({
       <main className="min-h-screen">
         {/* Breadcrumb */}
         <nav className="mx-auto max-w-6xl px-4 py-4" aria-label="Breadcrumb">
-          <ol className="flex items-center gap-1 text-sm text-muted-foreground">
+          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             <li>
               <Link href="/" className="transition-colors hover:text-foreground">
                 Home
@@ -100,8 +100,27 @@ export default async function VenueDetailPage({
             </li>
             <li><ChevronRight className="h-3.5 w-3.5" /></li>
             <li>
+              <Link href="/regions" className="transition-colors hover:text-foreground">
+                Regions
+              </Link>
+            </li>
+            {venue.area && (
+              <>
+                <li><ChevronRight className="h-3.5 w-3.5" /></li>
+                <li>
+                  <Link
+                    href={`/regions/${venue.area.toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')}`}
+                    className="transition-colors hover:text-foreground"
+                  >
+                    {venue.area}
+                  </Link>
+                </li>
+              </>
+            )}
+            <li><ChevronRight className="h-3.5 w-3.5" /></li>
+            <li>
               <Link
-                href={`/soft-play/${venue.city.toLowerCase()}`}
+                href={`/soft-play/${venue.city.toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')}`}
                 className="transition-colors hover:text-foreground"
               >
                 {venue.city}

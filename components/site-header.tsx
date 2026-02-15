@@ -22,16 +22,10 @@ export function SiteHeader() {
         {/* Desktop nav */}
         <nav className="hidden items-center gap-8 md:flex">
           <Link href="/search" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            Explore
+            Search
           </Link>
-          <Link href="/soft-play/london" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            London
-          </Link>
-          <Link href="/soft-play/manchester" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            Manchester
-          </Link>
-          <Link href="/soft-play/birmingham" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            Birmingham
+          <Link href="/regions" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            Browse by Region
           </Link>
         </nav>
 
@@ -50,16 +44,10 @@ export function SiteHeader() {
         <nav className="border-t border-border/50 bg-background px-5 pb-4 pt-2 md:hidden">
           <div className="flex flex-col gap-3">
             <Link href="/search" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-              Explore
+              Search
             </Link>
-            <Link href="/soft-play/london" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-              London
-            </Link>
-            <Link href="/soft-play/manchester" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-              Manchester
-            </Link>
-            <Link href="/soft-play/birmingham" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-              Birmingham
+            <Link href="/regions" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+              Browse by Region
             </Link>
           </div>
         </nav>
