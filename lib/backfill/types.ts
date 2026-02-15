@@ -35,7 +35,7 @@ export interface DiscoveredVenue {
   photoReferences: string[]
   phone?: string | null
   website?: string | null
-  openingHours?: { day: string; open: string; close: string }[]
+  openingHours?: { day: number; open: string; close: string }[]
 }
 
 export type BackfillRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'paused'

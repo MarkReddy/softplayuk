@@ -181,6 +181,30 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
               `
             }
           }
+
+          // Photos -- build URLs from photo references and save to venue_images
+          if (final.photoReferences && final.photoReferences.length > 0) {
+            const apiKey = process.env.GOOGLE_PLACES_API_KEY || ''
+            // Remove old Google-sourced images to avoid duplicates on re-runs
+            await sql`DELETE FROM venue_images WHERE venue_id = ${venueId} AND source = 'google'`
+            for (let pi = 0; pi < final.photoReferences.length; pi++) {
+              const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${final.photoReferences[pi]}&key=${apiKey}`
+              await sql`
+                INSERT INTO venue_images (venue_id, url, alt, source, is_primary, attribution)
+                VALUES (
+                  ${venueId},
+                  ${photoUrl},
+                  ${`${final.name} - photo ${pi + 1}`},
+                  'google',
+                  ${pi === 0},
+                  'Google Maps'
+                )
+              `
+            }
+            // Also set the primary image URL on the venue itself
+            const primaryUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${final.photoReferences[0]}&key=${apiKey}`
+            await sql`UPDATE venues SET image_url = ${primaryUrl} WHERE id = ${venueId}`
+          }
         } catch (err) {
           failed++
           await sql`

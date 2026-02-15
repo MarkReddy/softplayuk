@@ -86,7 +86,7 @@ export async function enrichVenue(googlePlaceId: string): Promise<Partial<Discov
   const key = getKey()
   const params = new URLSearchParams({
     place_id: googlePlaceId,
-    fields: 'formatted_phone_number,website,opening_hours,address_components,formatted_address',
+    fields: 'formatted_phone_number,website,opening_hours,address_components,formatted_address,photos',
     key,
   })
 
@@ -106,14 +106,19 @@ export async function enrichVenue(googlePlaceId: string): Promise<Partial<Discov
     if (!city && c.types?.includes('locality')) city = c.long_name
   }
 
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const hours = (r.opening_hours?.periods || [])
     .filter((p: { open?: unknown; close?: unknown }) => p.open && p.close)
     .map((p: { open: { day: number; time: string }; close: { time: string } }) => ({
-      day: dayNames[p.open.day] || String(p.open.day),
+      day: p.open.day, // numeric 0=Sunday..6=Saturday, matching day_of_week column
       open: `${String(p.open.time).slice(0, 2)}:${String(p.open.time).slice(2)}`,
       close: `${String(p.close.time).slice(0, 2)}:${String(p.close.time).slice(2)}`,
     }))
+
+  // Extract up to 10 photo references from Place Details
+  const photoRefs: string[] = (r.photos || [])
+    .slice(0, 10)
+    .map((p: { photo_reference: string }) => p.photo_reference)
+    .filter(Boolean)
 
   return {
     phone: r.formatted_phone_number || null,
@@ -122,5 +127,6 @@ export async function enrichVenue(googlePlaceId: string): Promise<Partial<Discov
     county: county || undefined,
     city: city || undefined,
     openingHours: hours.length > 0 ? hours : undefined,
+    photoReferences: photoRefs.length > 0 ? photoRefs : undefined,
   }
 }
