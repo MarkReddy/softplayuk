@@ -26,7 +26,7 @@ import { VenueGallery } from '@/components/venue-gallery'
 import { ReviewCard } from '@/components/review-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getVenueBySlug, getVenueReviews, getAllVenueSlugs } from '@/lib/db'
+import { getVenueBySlug, getVenueReviews } from '@/lib/db'
 import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel } from '@/lib/data'
 
 const amenityIconMap: Record<string, React.ReactNode> = {
@@ -39,10 +39,7 @@ const amenityIconMap: Record<string, React.ReactNode> = {
   tree: <TreePine className="h-4 w-4" />,
 }
 
-export async function generateStaticParams() {
-  const slugs = await getAllVenueSlugs()
-  return slugs.map((slug) => ({ slug }))
-}
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({
   params,
@@ -86,7 +83,7 @@ export default async function VenueDetailPage({
       <main className="min-h-screen">
         {/* Breadcrumb */}
         <nav className="mx-auto max-w-6xl px-4 py-4" aria-label="Breadcrumb">
-          <ol className="flex items-center gap-1 text-sm text-muted-foreground">
+          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             <li>
               <Link href="/" className="transition-colors hover:text-foreground">
                 Home
@@ -94,8 +91,27 @@ export default async function VenueDetailPage({
             </li>
             <li><ChevronRight className="h-3.5 w-3.5" /></li>
             <li>
+              <Link href="/regions" className="transition-colors hover:text-foreground">
+                Regions
+              </Link>
+            </li>
+            {venue.area && (
+              <>
+                <li><ChevronRight className="h-3.5 w-3.5" /></li>
+                <li>
+                  <Link
+                    href={`/regions/${venue.area.toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')}`}
+                    className="transition-colors hover:text-foreground"
+                  >
+                    {venue.area}
+                  </Link>
+                </li>
+              </>
+            )}
+            <li><ChevronRight className="h-3.5 w-3.5" /></li>
+            <li>
               <Link
-                href={`/soft-play/${venue.city.toLowerCase()}`}
+                href={`/soft-play/${venue.city.toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')}`}
                 className="transition-colors hover:text-foreground"
               >
                 {venue.city}
@@ -153,10 +169,12 @@ export default async function VenueDetailPage({
                     ({totalReviews} reviews)
                   </span>
                 </div>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span>Cleanliness: {venue.cleanlinessScore}/5</span>
-                </div>
+                {venue.cleanlinessScore > 0 && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span>Cleanliness: {(venue.cleanlinessScore / 2).toFixed(1)}/5</span>
+                  </div>
+                )}
               </div>
 
               {/* Split ratings */}
@@ -166,9 +184,11 @@ export default async function VenueDetailPage({
                     Google {venue.googleRating.toFixed(1)} ({venue.googleReviewCount})
                   </span>
                 )}
-                <span className="rounded-full bg-secondary px-2.5 py-1">
-                  Parents {venue.firstPartyRating.toFixed(1)} ({venue.firstPartyReviewCount})
-                </span>
+                {venue.firstPartyReviewCount > 0 && (
+                  <span className="rounded-full bg-secondary px-2.5 py-1">
+                    Parents {venue.firstPartyRating.toFixed(1)} ({venue.firstPartyReviewCount})
+                  </span>
+                )}
               </div>
 
               {/* Address */}
@@ -257,18 +277,22 @@ export default async function VenueDetailPage({
               <div className="sticky top-20 space-y-4">
                 <div className="rounded-2xl border border-border bg-card p-5">
                   <div className="space-y-3">
-                    <Button asChild className="w-full rounded-xl" size="lg">
-                      <a href={`tel:${venue.phone}`}>
-                        <Phone className="h-4 w-4" />
-                        Call {venue.phone}
-                      </a>
-                    </Button>
-                    <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
-                      <a href={venue.website} target="_blank" rel="noopener noreferrer">
-                        <Globe className="h-4 w-4" />
-                        Visit website
-                      </a>
-                    </Button>
+                    {venue.phone && (
+                      <Button asChild className="w-full rounded-xl" size="lg">
+                        <a href={`tel:${venue.phone}`}>
+                          <Phone className="h-4 w-4" />
+                          Call {venue.phone}
+                        </a>
+                      </Button>
+                    )}
+                    {venue.website && (
+                      <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
+                        <a href={venue.website} target="_blank" rel="noopener noreferrer">
+                          <Globe className="h-4 w-4" />
+                          Visit website
+                        </a>
+                      </Button>
+                    )}
                     <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
                       <a
                         href={`https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`}
@@ -321,14 +345,16 @@ export default async function VenueDetailPage({
                   </div>
                 </div>
 
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Data last refreshed{' '}
-                  {new Date(venue.lastRefreshedAt).toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </p>
+                {venue.lastRefreshedAt && venue.lastRefreshedAt !== 'undefined' && (
+                  <p className="text-center text-[11px] text-muted-foreground">
+                    Data last refreshed{' '}
+                    {new Date(venue.lastRefreshedAt).toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </p>
+                )}
               </div>
             </aside>
           </div>

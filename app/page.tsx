@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import Image from 'next/image'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
@@ -6,6 +8,7 @@ import { HowItWorks } from '@/components/how-it-works'
 import { TrustSignals } from '@/components/trust-signals'
 import { PopularSearches } from '@/components/popular-searches'
 import { FeaturedVenues } from '@/components/featured-venues'
+import { VenuesNearYou } from '@/components/venues-near-you'
 
 export default function HomePage() {
   return (
@@ -31,7 +34,7 @@ export default function HomePage() {
               </p>
               <PostcodeSearch size="lg" />
               <p className="mt-4 text-xs text-muted-foreground/70">
-                Try: SW1A 1AA, M1 1AA, LS1 6PU, BS1 1AA
+                Enter any UK postcode to find soft play centres nearby
               </p>
             </div>
 
@@ -55,6 +58,7 @@ export default function HomePage() {
         </section>
 
         <TrustSignals />
+        <VenuesNearYou />
         <HowItWorks />
         <FeaturedVenues />
         <PopularSearches />

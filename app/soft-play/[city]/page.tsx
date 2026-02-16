@@ -8,10 +8,7 @@ import { VenueCard } from '@/components/venue-card'
 import { PostcodeSearch } from '@/components/postcode-search'
 import { getCityPage, getVenuesByCity, getAllCityPages } from '@/lib/db'
 
-export async function generateStaticParams() {
-  const pages = await getAllCityPages()
-  return pages.map((c) => ({ city: c.slug }))
-}
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({
   params,
@@ -56,7 +53,26 @@ export default async function CityPage({
               </Link>
             </li>
             <li><ChevronRight className="h-3.5 w-3.5" /></li>
-            <li className="font-medium text-foreground">Soft Play in {page.city}</li>
+            <li>
+              <Link href="/regions" className="transition-colors hover:text-foreground">
+                Regions
+              </Link>
+            </li>
+            {page.area && (
+              <>
+                <li><ChevronRight className="h-3.5 w-3.5" /></li>
+                <li>
+                  <Link
+                    href={`/regions/${page.area.toLowerCase().replace(/\s+/g, '-').replace(/'/g, '')}`}
+                    className="transition-colors hover:text-foreground"
+                  >
+                    {page.area}
+                  </Link>
+                </li>
+              </>
+            )}
+            <li><ChevronRight className="h-3.5 w-3.5" /></li>
+            <li className="font-medium text-foreground">{page.city}</li>
           </ol>
         </nav>
 

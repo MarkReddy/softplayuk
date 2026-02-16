@@ -9,6 +9,15 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { X } from 'lucide-react'
+import useSWR from 'swr'
+
+interface RegionResult {
+  region: string
+  slug: string
+  venueCount: number
+}
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface SearchFiltersProps {
   sortBy: string
@@ -16,11 +25,13 @@ interface SearchFiltersProps {
   priceBand: string
   radius: string
   senOnly: boolean
+  region: string
   onSortChange: (val: string) => void
   onAgeChange: (val: string) => void
   onPriceChange: (val: string) => void
   onRadiusChange: (val: string) => void
   onSenToggle: () => void
+  onRegionChange: (val: string) => void
   onClearFilters: () => void
 }
 
@@ -30,14 +41,23 @@ export function SearchFilters({
   priceBand,
   radius,
   senOnly,
+  region,
   onSortChange,
   onAgeChange,
   onPriceChange,
   onRadiusChange,
   onSenToggle,
+  onRegionChange,
   onClearFilters,
 }: SearchFiltersProps) {
-  const hasFilters = ageGroup !== 'all' || priceBand !== 'all' || senOnly
+  const { data: regionsData } = useSWR<{ regions: RegionResult[] }>(
+    '/api/regions',
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+
+  const regions = regionsData?.regions ?? []
+  const hasFilters = ageGroup !== 'all' || priceBand !== 'all' || senOnly || region !== 'all'
 
   return (
     <div className="space-y-4">
@@ -64,6 +84,20 @@ export function SearchFilters({
             <SelectItem value="25">Within 25 miles</SelectItem>
             <SelectItem value="50">Within 50 miles</SelectItem>
             <SelectItem value="100">Within 100 miles</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={region} onValueChange={onRegionChange}>
+          <SelectTrigger className="w-[180px] rounded-xl bg-card">
+            <SelectValue placeholder="Region" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All regions</SelectItem>
+            {regions.map((r) => (
+              <SelectItem key={r.slug} value={r.slug}>
+                {r.region} ({r.venueCount})
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -116,6 +150,15 @@ export function SearchFilters({
 
       {hasFilters && (
         <div className="flex flex-wrap gap-2">
+          {region !== 'all' && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1 rounded-full"
+              onClick={() => onRegionChange('all')}
+            >
+              Region: {regions.find((r) => r.slug === region)?.region ?? region} <X className="h-3 w-3" />
+            </Badge>
+          )}
           {ageGroup !== 'all' && (
             <Badge
               variant="secondary"
