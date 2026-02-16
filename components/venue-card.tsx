@@ -3,7 +3,7 @@ import NextImage from "next/image"
 import { Star, Car, Coffee, Heart, PartyPopper, MapPin, Clock, Wifi, Baby, TreePine } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { Venue, SearchResult } from "@/lib/types"
-import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel } from "@/lib/data"
+import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel, getCategoryLabel, getCategoryStyle, isPublicArea } from "@/lib/data"
 
 const amenityIcons: Record<string, React.ReactNode> = {
   car: <Car className="h-3.5 w-3.5" />,
@@ -125,8 +125,11 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
           {venue.shortDescription}
         </p>
 
-        {/* Badges row: age, price, SEN */}
+        {/* Badges row: category, age, price, SEN */}
         <div className="flex flex-wrap items-center gap-1.5">
+          <Badge className={`text-xs font-medium ${getCategoryStyle(venue.primaryCategory).bg} ${getCategoryStyle(venue.primaryCategory).text} border-0`}>
+            {getCategoryLabel(venue.primaryCategory)}
+          </Badge>
           <Badge variant="secondary" className="text-xs">
             {getAgeLabel(venue.ageRange.min, venue.ageRange.max)}
           </Badge>
@@ -157,9 +160,11 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
         <div className="mt-auto flex items-center gap-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
           <span>
-            {venue.openingHours.monday === "Closed"
-              ? "Closed Mondays"
-              : `Mon ${venue.openingHours.monday}`}
+            {isPublicArea(venue.primaryCategory) && Object.values(venue.openingHours).every((h) => h === "Closed")
+              ? "Open 24 hours"
+              : venue.openingHours.monday === "Closed"
+                ? "Closed Mondays"
+                : `Mon ${venue.openingHours.monday}`}
           </span>
         </div>
       </div>

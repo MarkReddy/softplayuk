@@ -28,7 +28,7 @@ import { LeaveReviewForm } from '@/components/leave-review-form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getVenueBySlug, getVenueReviews } from '@/lib/db'
-import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel } from '@/lib/data'
+import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel, getCategoryLabel, getCategoryStyle, isPublicArea } from '@/lib/data'
 
 const amenityIconMap: Record<string, React.ReactNode> = {
   car: <Car className="h-4 w-4" />,
@@ -132,6 +132,9 @@ export default async function VenueDetailPage({
             <div className="lg:col-span-2">
               {/* Badges */}
               <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Badge className={`gap-1 font-medium border-0 ${getCategoryStyle(venue.primaryCategory).bg} ${getCategoryStyle(venue.primaryCategory).text}`}>
+                  {getCategoryLabel(venue.primaryCategory)}
+                </Badge>
                 {venue.verified && (
                   <Badge className="gap-1 bg-primary text-primary-foreground">
                     <ShieldCheck className="h-3 w-3" />
@@ -320,16 +323,22 @@ export default async function VenueDetailPage({
                     <Clock className="h-4 w-4 text-primary" />
                     Opening hours
                   </h3>
-                  <ul className="space-y-2">
-                    {days.map((day) => (
-                      <li key={day} className="flex items-center justify-between text-sm">
-                        <span className="capitalize text-muted-foreground">{day}</span>
-                        <span className={`font-medium ${venue.openingHours[day] === 'Closed' ? 'text-destructive' : 'text-foreground'}`}>
-                          {venue.openingHours[day]}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  {isPublicArea(venue.primaryCategory) && Object.values(venue.openingHours).every((h) => h === 'Closed') ? (
+                    <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                      Open 24 hours -- public access
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {days.map((day) => (
+                        <li key={day} className="flex items-center justify-between text-sm">
+                          <span className="capitalize text-muted-foreground">{day}</span>
+                          <span className={`font-medium ${venue.openingHours[day] === 'Closed' ? 'text-destructive' : 'text-foreground'}`}>
+                            {venue.openingHours[day]}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-border bg-card p-5">
