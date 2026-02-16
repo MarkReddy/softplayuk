@@ -7,6 +7,17 @@ const nextConfig = {
   // If any next/image usage exists, this config will allow all local paths
   images: {
     unoptimized: true,
+    localPatterns: [
+      {
+        pathname: '/**',
+      },
+    ],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
 }
 
