@@ -1,6 +1,11 @@
-import { neon } from '@neondatabase/serverless'
+const { neon } = require('@neondatabase/serverless')
 
-const sql = neon(process.env.DATABASE_URL)
+const DATABASE_URL = process.env.DATABASE_URL
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL not set')
+  process.exit(1)
+}
+const sql = neon(DATABASE_URL)
 
 // Standard opening hours for soft play centres
 const WEEKDAY_HOURS = { open: '09:30', close: '18:00' }
