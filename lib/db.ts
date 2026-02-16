@@ -58,7 +58,7 @@ function hydrateVenue(
     website: row.website as string || '',
     imageUrl: images[0]?.url || (row.image_url as string) || `/images/venue-${(Number(row.id) % 6) + 1}.jpg`,
     images,
-    primaryCategory: 'soft_play',
+    primaryCategory: (row.category as string) || 'soft_play',
     ageRange: { min: ageMin || 0, max: ageMax || 12 },
     priceBand,
     amenities,
@@ -167,24 +167,42 @@ export async function searchVenues(
   lat: number,
   lng: number,
   radiusMiles: number,
+  category?: string,
 ): Promise<(Venue & { distance: number })[]> {
   // Use Haversine formula in SQL via subquery for distance filtering
-  const rows = await sql`
-    SELECT * FROM (
-      SELECT *,
-        (3959 * acos(
-          LEAST(1.0, GREATEST(-1.0,
-            cos(radians(${lat})) * cos(radians(lat)) *
-            cos(radians(lng) - radians(${lng})) +
-            sin(radians(${lat})) * sin(radians(lat))
-          ))
-        )) AS distance_miles
-      FROM venues
-      WHERE status = 'active'
-    ) AS v
-    WHERE distance_miles <= ${radiusMiles}
-    ORDER BY distance_miles ASC
-  `
+  const rows = category && category !== 'all'
+    ? await sql`
+      SELECT * FROM (
+        SELECT *,
+          (3959 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat})) * cos(radians(lat)) *
+              cos(radians(lng) - radians(${lng})) +
+              sin(radians(${lat})) * sin(radians(lat))
+            ))
+          )) AS distance_miles
+        FROM venues
+        WHERE status = 'active' AND category = ${category}
+      ) AS v
+      WHERE distance_miles <= ${radiusMiles}
+      ORDER BY distance_miles ASC
+    `
+    : await sql`
+      SELECT * FROM (
+        SELECT *,
+          (3959 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat})) * cos(radians(lat)) *
+              cos(radians(lng) - radians(${lng})) +
+              sin(radians(${lat})) * sin(radians(lat))
+            ))
+          )) AS distance_miles
+        FROM venues
+        WHERE status = 'active'
+      ) AS v
+      WHERE distance_miles <= ${radiusMiles}
+      ORDER BY distance_miles ASC
+    `
 
   const venues: (Venue & { distance: number })[] = []
   for (const row of rows) {

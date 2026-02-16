@@ -1,12 +1,17 @@
 import { neon } from '@neondatabase/serverless'
 import type { BackfillConfig, BackfillProgress, DiscoveredVenue } from './types'
-import { generateGrid } from './types'
+import { generateGrid, UK_BOUNDS } from './types'
 import { searchCell, enrichVenue } from './google-places-provider'
 
 function getSQL() {
   const url = process.env.DATABASE_URL
   if (!url) throw new Error('DATABASE_URL not set')
   return neon(url)
+}
+
+function isWithinUK(lat: number, lng: number): boolean {
+  return lat >= UK_BOUNDS.minLat && lat <= UK_BOUNDS.maxLat &&
+         lng >= UK_BOUNDS.minLng && lng <= UK_BOUNDS.maxLng
 }
 
 function slugify(name: string, city: string): string {
@@ -116,12 +121,25 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
         }
         seenPlaceIds.add(venue.googlePlaceId)
 
+        // Coordinate-based UK filter -- reject venues outside UK bounds
+        if (!isWithinUK(venue.lat, venue.lng)) {
+          console.log(`[v0] Skipping non-UK venue by coordinates: ${venue.name} (${venue.lat}, ${venue.lng})`)
+          skipped++
+          continue
+        }
+
         // Enrich if requested
         let enrichedData: Partial<DiscoveredVenue> = {}
         if (config.enrichDetails) {
           try {
             const details = await enrichVenue(venue.googlePlaceId)
             if (details) {
+              // Check if enrichment flagged this as non-UK
+              if ((details as Record<string, unknown>)._rejected) {
+                console.log(`[v0] Skipping non-UK venue by enrichment: ${venue.name}`)
+                skipped++
+                continue
+              }
               enrichedData = details
               enriched++
             }
@@ -222,12 +240,11 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
             }
           }
 
-          // Photos
+          // Photos -- store proxy URLs so API key isn't leaked to clients
           if (final.photoReferences && final.photoReferences.length > 0) {
-            const apiKey = process.env.GOOGLE_PLACES_API_KEY || ''
             await sql`DELETE FROM venue_images WHERE venue_id = ${venueId} AND source = 'google'`
             for (let pi = 0; pi < final.photoReferences.length; pi++) {
-              const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${final.photoReferences[pi]}&key=${apiKey}`
+              const photoUrl = `/api/venue-photo?ref=${final.photoReferences[pi]}&maxwidth=800`
               await sql`
                 INSERT INTO venue_images (venue_id, url, alt, source, is_primary, attribution)
                 VALUES (
@@ -237,7 +254,7 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
                 )
               `
             }
-            const primaryUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${final.photoReferences[0]}&key=${apiKey}`
+            const primaryUrl = `/api/venue-photo?ref=${final.photoReferences[0]}&maxwidth=800`
             await sql`UPDATE venues SET image_url = ${primaryUrl} WHERE id = ${venueId}`
           }
         } catch (err) {

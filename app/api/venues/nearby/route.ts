@@ -15,13 +15,14 @@ export async function GET(request: Request) {
   const lng = parseFloat(searchParams.get('lng') || '') || DEFAULT_LNG
   const radius = Math.min(parseFloat(searchParams.get('radius') || '') || DEFAULT_RADIUS, 50)
   const limit = Math.min(parseInt(searchParams.get('limit') || '') || 6, 20)
+  const category = searchParams.get('category') || undefined
 
   // Determine location label
   const isDefault = lat === DEFAULT_LAT && lng === DEFAULT_LNG
   const locationLabel = searchParams.get('label') || (isDefault ? 'Leamington Spa' : 'you')
 
   try {
-    const venues = await searchVenues(lat, lng, radius)
+    const venues = await searchVenues(lat, lng, radius, category)
     const limited = venues.slice(0, limit)
 
     return NextResponse.json({
