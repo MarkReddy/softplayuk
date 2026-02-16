@@ -1,6 +1,5 @@
 export const dynamic = 'force-dynamic'
 
-import Image from 'next/image'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { PostcodeSearch } from '@/components/postcode-search'
@@ -42,13 +41,11 @@ export default function HomePage() {
             {/* Right: warm image with organic mask */}
             <div className="relative flex-1">
               <div className="relative mx-auto aspect-[4/3] max-w-md overflow-hidden rounded-[2rem] shadow-lg" style={{ borderRadius: '42% 58% 62% 38% / 45% 55% 45% 55%' }}>
-                <Image
+                <img
                   src="/images/hero-softplay.jpg"
                   alt="Children playing happily in a bright, colourful soft play centre"
-                  fill
-                  className="object-cover"
-                  priority
-                  sizes="(max-width: 768px) 90vw, 440px"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  fetchPriority="high"
                 />
               </div>
               {/* Small decorative dot */}
