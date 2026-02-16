@@ -52,45 +52,28 @@ export async function POST(request: Request) {
       })
     }
 
+    console.log('[v0] Creating backfill run with config:', JSON.stringify(config))
     const runId = await createRun(config)
+    console.log('[v0] Created run', runId, '- starting execution')
 
-    // Stream the execution as SSE so the Vercel function stays alive.
-    // The function runs for up to maxDuration (300s / 5 min).
-    // The dashboard polls /api/admin/backfill/runs for live progress anyway,
-    // but we must keep THIS request alive or Vercel kills executeRun().
-    const encoder = new TextEncoder()
-    const stream = new ReadableStream({
-      async start(controller) {
-        // Send the initial runId immediately so the client can navigate
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ runId, status: 'started' })}\n\n`),
-        )
+    // Await execution directly. maxDuration=300 keeps the function alive for up to 5 min.
+    // The dashboard polls /api/admin/backfill/runs for live progress during execution.
+    const result = await executeRun(runId)
 
-        try {
-          const result = await executeRun(runId)
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ runId, status: result.status, discovered: result.discovered, inserted: result.inserted, updated: result.updated, enriched: result.enriched, failed: result.failed })}\n\n`,
-            ),
-          )
-        } catch (err) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ runId, status: 'failed', error: err instanceof Error ? err.message : String(err) })}\n\n`,
-            ),
-          )
-        } finally {
-          controller.close()
-        }
-      },
-    })
+    console.log('[v0] Run', runId, 'finished with status:', result.status,
+      '| discovered:', result.discovered, '| inserted:', result.inserted,
+      '| updated:', result.updated, '| failed:', result.failed)
 
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
+    return NextResponse.json({
+      runId,
+      status: result.status,
+      discovered: result.discovered,
+      inserted: result.inserted,
+      updated: result.updated,
+      enriched: result.enriched,
+      failed: result.failed,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
     })
   } catch (err) {
     console.error('[v0] Backfill start error:', err)

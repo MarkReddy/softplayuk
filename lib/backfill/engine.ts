@@ -25,15 +25,21 @@ export async function createRun(config: BackfillConfig): Promise<number> {
   const sql = getSQL()
   const cells = generateGrid(config)
 
+  console.log('[v0] createRun: mode=', config.mode, 'region=', config.region || config.city, 'cells=', cells.length)
+
   const rows = await sql`
     INSERT INTO backfill_runs (
-      provider, mode, region_label, status, total_cells, config
+      provider, mode, region_label, status, total_cells,
+      processed_cells, venues_discovered, venues_inserted, venues_updated,
+      venues_skipped, failed_venues, enriched_venues,
+      config
     ) VALUES (
       ${config.provider},
       ${config.mode},
       ${config.region || config.city || 'Full UK'},
       'pending',
       ${cells.length},
+      0, 0, 0, 0, 0, 0, 0,
       ${JSON.stringify(config)}
     )
     RETURNING id
@@ -46,12 +52,16 @@ export async function createRun(config: BackfillConfig): Promise<number> {
 export async function executeRun(runId: number): Promise<BackfillProgress> {
   const sql = getSQL()
 
+  console.log('[v0] executeRun: starting run', runId)
+
   const runRows = await sql`SELECT * FROM backfill_runs WHERE id = ${runId}`
   if (runRows.length === 0) throw new Error(`Run ${runId} not found`)
   const run = runRows[0]
 
   const config: BackfillConfig = typeof run.config === 'string' ? JSON.parse(run.config) : run.config
   const cells = generateGrid(config)
+
+  console.log('[v0] executeRun: run', runId, 'has', cells.length, 'cells, mode=', config.mode)
 
   await sql`
     UPDATE backfill_runs SET
@@ -60,35 +70,50 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
   `
 
   let discovered = 0, inserted = 0, updated = 0, skipped = 0, failed = 0, enriched = 0
-  let processedCells = Number(run.processed_cells) || 0
+  const startCellIdx = Number(run.processed_cells) || 0
 
-  // Global dedup across cells
+  // Global dedup across cells in this run
   const seenPlaceIds = new Set<string>()
   const existingBv = await sql`SELECT google_place_id FROM backfill_venues WHERE run_id = ${runId}`
   for (const v of existingBv) seenPlaceIds.add(v.google_place_id as string)
 
+  let processedCells = startCellIdx
+
   try {
-    for (let i = processedCells; i < cells.length; i++) {
+    for (let i = startCellIdx; i < cells.length; i++) {
       const cell = cells[i]
       let cellVenues: DiscoveredVenue[] = []
 
+      console.log(`[v0] Cell ${i + 1}/${cells.length}: searching (${cell.lat}, ${cell.lng}) r=${cell.radiusMetres}m`)
+
       try {
         cellVenues = await searchCell(cell.lat, cell.lng, cell.radiusMetres)
+        console.log(`[v0] Cell ${i + 1}: found ${cellVenues.length} venues`)
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        console.error(`[v0] Cell ${i + 1} search error:`, errMsg)
         failed++
         await sql`
           UPDATE backfill_runs SET
-            failed_venues = failed_venues + 1,
-            error_log = COALESCE(error_log, '') || ${`\nCell ${i} error: ${err instanceof Error ? err.message : String(err)}`}
+            failed_venues = ${failed},
+            error_log = COALESCE(error_log, '') || ${`\nCell ${i} error: ${errMsg}`}
           WHERE id = ${runId}
         `
         processedCells = i + 1
+        await sql`
+          UPDATE backfill_runs SET processed_cells = ${processedCells}, updated_at = NOW()
+          WHERE id = ${runId}
+        `
         continue
       }
 
       for (const venue of cellVenues) {
         discovered++
-        if (seenPlaceIds.has(venue.googlePlaceId)) { skipped++; continue }
+
+        if (seenPlaceIds.has(venue.googlePlaceId)) {
+          skipped++
+          continue
+        }
         seenPlaceIds.add(venue.googlePlaceId)
 
         // Enrich if requested
@@ -96,19 +121,27 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
         if (config.enrichDetails) {
           try {
             const details = await enrichVenue(venue.googlePlaceId)
-            if (details) { enrichedData = details; enriched++ }
-          } catch { /* continue with basic data */ }
+            if (details) {
+              enrichedData = details
+              enriched++
+            }
+          } catch (err) {
+            console.error(`[v0] Enrich error for ${venue.name}:`, err instanceof Error ? err.message : err)
+            // Continue with basic data
+          }
         }
 
         const final = { ...venue, ...enrichedData }
         const venueSlug = slugify(final.name, final.city || config.city || config.region || 'uk')
 
         try {
-          // Check existing
+          // Check if venue already exists by google_place_id
           const existingRows = await sql`SELECT id FROM venues WHERE google_place_id = ${final.googlePlaceId}`
+          const isExisting = existingRows.length > 0
 
           let venueId: number
-          if (existingRows.length > 0) {
+
+          if (isExisting) {
             venueId = Number(existingRows[0].id)
             await sql`
               UPDATE venues SET
@@ -125,10 +158,12 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
                 confidence_score = CASE
                   WHEN ${final.postcode || ''} != '' AND ${final.phone || ''} != '' THEN 0.9
                   WHEN ${final.postcode || ''} != '' THEN 0.7 ELSE 0.5 END,
-                enrichment_status = ${config.enrichDetails ? 'enriched' : 'basic'}
+                enrichment_status = ${config.enrichDetails ? 'enriched' : 'basic'},
+                updated_at = NOW()
               WHERE id = ${venueId}
             `
             updated++
+            console.log(`[v0] Updated venue: ${final.name} (id=${venueId})`)
           } else {
             const insertRows = await sql`
               INSERT INTO venues (
@@ -137,23 +172,28 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
                 phone, website, status, last_google_sync, confidence_score, enrichment_status
               ) VALUES (
                 ${venueSlug}, ${final.name}, ${final.lat}, ${final.lng},
-                ${final.address}, ${final.city || ''}, ${final.county || ''},
-                ${final.postcode || ''}, 'United Kingdom',
+                ${final.address}, ${final.city || null}, ${final.county || null},
+                ${final.postcode || null}, 'United Kingdom',
                 ${final.googlePlaceId}, ${final.googleRating}, ${final.googleReviewCount},
                 ${final.phone || null}, ${final.website || null},
                 'active', NOW(),
                 ${final.postcode ? 0.7 : 0.5},
                 ${config.enrichDetails ? 'enriched' : 'basic'}
               )
-              ON CONFLICT (slug) DO UPDATE SET
-                google_place_id = EXCLUDED.google_place_id,
+              ON CONFLICT (google_place_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                lat = EXCLUDED.lat,
+                lng = EXCLUDED.lng,
+                address_line1 = EXCLUDED.address_line1,
                 google_rating = EXCLUDED.google_rating,
                 google_review_count = EXCLUDED.google_review_count,
-                last_google_sync = NOW()
+                last_google_sync = NOW(),
+                updated_at = NOW()
               RETURNING id
             `
             venueId = Number(insertRows[0].id)
             inserted++
+            console.log(`[v0] Inserted venue: ${final.name} (id=${venueId})`)
           }
 
           // Log in backfill_venues
@@ -162,7 +202,7 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
               run_id, venue_id, google_place_id, status, confidence_score, enrichment_status, raw_data
             ) VALUES (
               ${runId}, ${venueId}, ${final.googlePlaceId},
-              ${existingRows.length > 0 ? 'updated' : 'inserted'},
+              ${isExisting ? 'updated' : 'inserted'},
               ${final.postcode ? 0.7 : 0.5},
               ${config.enrichDetails ? 'enriched' : 'basic'},
               ${JSON.stringify(final)}
@@ -182,46 +222,47 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
             }
           }
 
-          // Photos -- build URLs from photo references and save to venue_images
+          // Photos
           if (final.photoReferences && final.photoReferences.length > 0) {
             const apiKey = process.env.GOOGLE_PLACES_API_KEY || ''
-            // Remove old Google-sourced images to avoid duplicates on re-runs
             await sql`DELETE FROM venue_images WHERE venue_id = ${venueId} AND source = 'google'`
             for (let pi = 0; pi < final.photoReferences.length; pi++) {
               const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${final.photoReferences[pi]}&key=${apiKey}`
               await sql`
                 INSERT INTO venue_images (venue_id, url, alt, source, is_primary, attribution)
                 VALUES (
-                  ${venueId},
-                  ${photoUrl},
+                  ${venueId}, ${photoUrl},
                   ${`${final.name} - photo ${pi + 1}`},
-                  'google',
-                  ${pi === 0},
-                  'Google Maps'
+                  'google', ${pi === 0}, 'Google Maps'
                 )
               `
             }
-            // Also set the primary image URL on the venue itself
             const primaryUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${final.photoReferences[0]}&key=${apiKey}`
             await sql`UPDATE venues SET image_url = ${primaryUrl} WHERE id = ${venueId}`
           }
         } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err)
+          console.error(`[v0] Venue insert/update error for ${final.name}:`, errMsg)
           failed++
-          await sql`
-            INSERT INTO backfill_venues (
-              run_id, google_place_id, status, error_message, raw_data
-            ) VALUES (
-              ${runId}, ${final.googlePlaceId}, 'failed',
-              ${err instanceof Error ? err.message : String(err)},
-              ${JSON.stringify(final)}
-            )
-            ON CONFLICT (run_id, google_place_id) DO UPDATE SET
-              status = 'failed', error_message = EXCLUDED.error_message, updated_at = NOW()
-          `
+          try {
+            await sql`
+              INSERT INTO backfill_venues (
+                run_id, google_place_id, status, error_message, raw_data
+              ) VALUES (
+                ${runId}, ${final.googlePlaceId}, 'failed',
+                ${errMsg},
+                ${JSON.stringify(final)}
+              )
+              ON CONFLICT (run_id, google_place_id) DO UPDATE SET
+                status = 'failed', error_message = EXCLUDED.error_message, updated_at = NOW()
+            `
+          } catch { /* best effort logging */ }
         }
       }
 
       processedCells = i + 1
+
+      // Update progress after each cell
       await sql`
         UPDATE backfill_runs SET
           processed_cells = ${processedCells},
@@ -230,8 +271,11 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
           failed_venues = ${failed}, enriched_venues = ${enriched}, updated_at = NOW()
         WHERE id = ${runId}
       `
+
+      console.log(`[v0] Cell ${processedCells}/${cells.length} done. Totals: d=${discovered} i=${inserted} u=${updated} s=${skipped} f=${failed} e=${enriched}`)
     }
 
+    // Mark completed
     await sql`
       UPDATE backfill_runs SET
         status = 'completed', processed_cells = ${processedCells},
@@ -242,11 +286,16 @@ export async function executeRun(runId: number): Promise<BackfillProgress> {
         updated_at = NOW()
       WHERE id = ${runId}
     `
+
+    console.log(`[v0] Run ${runId} completed successfully`)
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.error(`[v0] Run ${runId} failed:`, errMsg)
+
     await sql`
       UPDATE backfill_runs SET
         status = 'failed',
-        error_log = ${err instanceof Error ? err.message : String(err)},
+        error_log = ${errMsg},
         processed_cells = ${processedCells},
         venues_discovered = ${discovered}, venues_inserted = ${inserted},
         venues_updated = ${updated}, venues_skipped = ${skipped},

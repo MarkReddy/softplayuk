@@ -70,51 +70,17 @@ export function BackfillDashboard() {
     setDryRunResult(null)
     setLastStartedId(null)
     try {
+      // The API awaits the full execution (up to 5 min on Vercel).
+      // The dashboard polls /api/admin/backfill/runs every 5s for live progress.
       const res = await fetchWithAuth('/api/admin/backfill/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, region: region || undefined, city: city || undefined, enrichDetails, dryRun: false }),
       })
-
-      // The response may be SSE (streaming) or JSON (error)
-      const contentType = res.headers.get('content-type') || ''
-
-      if (contentType.includes('text/event-stream') && res.body) {
-        // Read the first SSE message to get the runId, then detach
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let gotRunId = false
-
-        const readChunk = async () => {
-          const { done, value } = await reader.read()
-          if (done) return
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const parsed = JSON.parse(line.slice(6))
-                if (parsed.runId && !gotRunId) {
-                  gotRunId = true
-                  setLastStartedId(parsed.runId)
-                  refreshRuns()
-                }
-              } catch { /* ignore parse errors */ }
-            }
-          }
-          if (!gotRunId) await readChunk()
-        }
-        await readChunk()
-
-        // Let the stream continue in background (keeps function alive on Vercel)
-        // We don't need to read further -- the dashboard polls for progress
-      } else {
-        const data = await res.json()
-        if (!res.ok) { setError(data.error || 'Failed to start'); return }
-        setLastStartedId(data.runId)
-        refreshRuns()
-      }
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Failed to start'); return }
+      setLastStartedId(data.runId)
+      refreshRuns()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error')
     } finally {
@@ -211,21 +177,28 @@ export function BackfillDashboard() {
             </div>
           )}
 
-          {lastStartedId && (
+          {starting && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
+              Backfill is running. Check the Run History below for live progress (refreshes every 5s).
+              You can safely navigate to the run detail page while this runs.
+            </div>
+          )}
+
+          {lastStartedId && !starting && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">
-              Run #{lastStartedId} started.{' '}
+              Run #{lastStartedId} completed.{' '}
               <Link href={`/admin/backfill/runs/${lastStartedId}`} className="font-medium underline">
-                View progress
+                View results
               </Link>
             </div>
           )}
 
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleDryRun} disabled={!canStart}>
+            <Button variant="outline" onClick={handleDryRun} disabled={!canStart || starting}>
               Dry Run (preview cells)
             </Button>
             <Button onClick={handleStart} disabled={starting || !canStart}>
-              {starting ? 'Starting...' : 'Start Backfill'}
+              {starting ? 'Running backfill...' : 'Start Backfill'}
             </Button>
           </div>
         </CardContent>
