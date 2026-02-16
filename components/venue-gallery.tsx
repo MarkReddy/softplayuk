@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import NextImage from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { VenueImage } from '@/lib/types'
 import { getSourceLabel } from '@/lib/data'
@@ -23,14 +23,11 @@ export function VenueGallery({
     return (
       <div className="relative overflow-hidden rounded-2xl">
         <div className="relative aspect-[16/9] md:aspect-[2/1]">
-          <Image
-            src={src}
-            alt={name}
-            fill
-            className="object-cover"
-            priority
-            sizes="(max-width: 768px) 100vw, 800px"
-          />
+          {src.startsWith('/api/') ? (
+            <img src={src} alt={name} className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <NextImage src={src} alt={name} fill className="object-cover" priority sizes="(max-width: 768px) 100vw, 800px" />
+          )}
           <span className="absolute bottom-3 right-3 rounded-full bg-foreground/50 px-2.5 py-1 text-[10px] text-primary-foreground backdrop-blur-sm">
             Photo: SoftPlay UK
           </span>
@@ -44,14 +41,11 @@ export function VenueGallery({
   return (
     <div className="relative overflow-hidden rounded-2xl">
       <div className="relative aspect-[16/9] md:aspect-[2/1]">
-        <Image
-          src={img.url}
-          alt={`${name} - Photo ${current + 1}`}
-          fill
-          className="object-cover"
-          priority
-          sizes="(max-width: 768px) 100vw, 800px"
-        />
+        {img.url.startsWith('/api/') ? (
+          <img src={img.url} alt={`${name} - Photo ${current + 1}`} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <NextImage src={img.url} alt={`${name} - Photo ${current + 1}`} fill className="object-cover" priority sizes="(max-width: 768px) 100vw, 800px" />
+        )}
         {/* Source attribution overlay */}
         <span className="absolute bottom-3 right-3 rounded-full bg-foreground/50 px-2.5 py-1 text-[10px] text-primary-foreground backdrop-blur-sm">
           Photo: {img.attribution || getSourceLabel(img.source)}

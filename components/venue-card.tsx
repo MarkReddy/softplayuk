@@ -1,5 +1,5 @@
 import Link from "next/link"
-import Image from "next/image"
+import NextImage from "next/image"
 import { Star, Car, Coffee, Heart, PartyPopper, MapPin, Clock, Wifi, Baby, TreePine } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { Venue, SearchResult } from "@/lib/types"
@@ -47,13 +47,22 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
     >
       {/* Image */}
       <div className="relative aspect-[16/10] overflow-hidden">
-        <Image
-          src={venue.imageUrl}
-          alt={`${venue.name} soft play centre`}
-          fill
-          className="object-cover transition-transform duration-300 group-hover:scale-105"
-          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-        />
+        {venue.imageUrl.startsWith('/api/') ? (
+          <img
+            src={venue.imageUrl}
+            alt={`${venue.name} soft play centre`}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <NextImage
+            src={venue.imageUrl}
+            alt={`${venue.name} soft play centre`}
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          />
+        )}
         {venue.verified && (
           <Badge className="absolute left-3 top-3 bg-primary text-primary-foreground text-xs">
             Verified
