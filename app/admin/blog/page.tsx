@@ -55,9 +55,12 @@ function BlogGate() {
 
   if (!isAuthenticated) return <AdminLogin />
 
+  const [errors, setErrors] = useState<string[]>([])
+
   const handleGenerate = async (action: string, params: Record<string, unknown>) => {
     setLoading(true)
     setMessage('')
+    setErrors([])
     try {
       const res = await fetchWithAuth('/api/admin/generate-blog-posts', {
         method: 'POST',
@@ -65,7 +68,13 @@ function BlogGate() {
         body: JSON.stringify({ action, ...params }),
       })
       const data = await res.json()
-      setMessage(data.message || 'Done')
+      setMessage(data.message || data.error || 'Done')
+      if (data.errors && data.errors.length > 0) {
+        setErrors(data.errors)
+      }
+      if (data.detail) {
+        setMessage((prev) => `${prev} -- ${data.detail}`)
+      }
       fetchPosts()
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error occurred')
@@ -179,9 +188,19 @@ function BlogGate() {
         </div>
 
         {message && (
-          <p className={`text-sm font-medium ${message.includes('Error') || message.includes('already') ? 'text-destructive' : 'text-emerald-600'}`}>
+          <p className={`text-sm font-medium ${message.includes('Error') || message.includes('already') || message.includes('failed') ? 'text-destructive' : 'text-emerald-600'}`}>
             {message}
           </p>
+        )}
+        {errors.length > 0 && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+            <p className="mb-1 text-xs font-medium text-destructive">Errors ({errors.length}):</p>
+            <ul className="max-h-40 overflow-y-auto space-y-0.5">
+              {errors.map((err, i) => (
+                <li key={i} className="text-xs text-destructive/80">{err}</li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
