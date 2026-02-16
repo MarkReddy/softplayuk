@@ -11,6 +11,7 @@ import { VenuesNearYou } from '@/components/venues-near-you'
 import { LiveViewers } from '@/components/live-viewers'
 
 export default function HomePage() {
+  console.log("[v0] HomePage rendering with native img tags - no next/image")
   return (
     <>
       <SiteHeader />

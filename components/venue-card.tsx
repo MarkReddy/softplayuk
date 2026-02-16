@@ -36,6 +36,7 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
+  console.log("[v0] VenueCard rendering with native img tags - no next/image")
   const blended = getBlendedRating(venue)
   const totalReviews = (venue.googleReviewCount || 0) + venue.firstPartyReviewCount
 
