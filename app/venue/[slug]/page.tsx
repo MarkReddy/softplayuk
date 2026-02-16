@@ -24,6 +24,7 @@ import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { VenueGallery } from '@/components/venue-gallery'
 import { ReviewCard } from '@/components/review-card'
+import { LeaveReviewForm } from '@/components/leave-review-form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getVenueBySlug, getVenueReviews } from '@/lib/db'
@@ -124,7 +125,7 @@ export default async function VenueDetailPage({
 
         <div className="mx-auto max-w-6xl px-4 pb-16">
           {/* Gallery */}
-          <VenueGallery images={venue.images} name={venue.name} />
+          <VenueGallery images={venue.images} name={venue.name} fallbackImage={venue.imageUrl} />
 
           <div className="mt-8 grid gap-8 lg:grid-cols-3">
             {/* Main content */}
@@ -269,6 +270,10 @@ export default async function VenueDetailPage({
                     No reviews yet. Be the first parent to review this venue!
                   </p>
                 )}
+
+                <div className="mt-6">
+                  <LeaveReviewForm venueId={venue.id} venueName={venue.name} />
+                </div>
               </div>
             </div>
 
@@ -327,27 +332,23 @@ export default async function VenueDetailPage({
                   </ul>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border">
-                  <iframe
-                    title={`Map showing ${venue.name}`}
-                    className="aspect-[4/3] w-full border-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps/embed/v1/place?key=${process.env.GOOGLE_PLACES_API_KEY || ''}&q=${encodeURIComponent(venue.name + ' ' + venue.postcode)}&center=${venue.lat},${venue.lng}&zoom=15`}
-                    allowFullScreen
-                  />
-                  <div className="bg-card p-3 text-center">
-                    <p className="text-sm font-medium text-foreground">{venue.address}</p>
-                    <p className="text-xs text-muted-foreground">{venue.postcode}</p>
+                <div className="rounded-2xl border border-border bg-card p-5">
+                  <h3 className="mb-3 flex items-center gap-2 font-serif text-lg font-bold text-foreground">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    Location
+                  </h3>
+                  <p className="mb-1 text-sm font-medium text-foreground">{venue.address}</p>
+                  <p className="mb-4 text-sm text-muted-foreground">{venue.postcode}</p>
+                  <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${venue.lat},${venue.lng}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name + ', ' + venue.postcode)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 inline-block text-sm font-medium text-primary hover:underline"
                     >
+                      <MapPin className="h-4 w-4" />
                       Open in Google Maps
                     </a>
-                  </div>
+                  </Button>
                 </div>
 
                 {venue.lastRefreshedAt && venue.lastRefreshedAt !== 'undefined' && (

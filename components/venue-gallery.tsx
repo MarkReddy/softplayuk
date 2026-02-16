@@ -9,21 +9,31 @@ import { getSourceLabel } from '@/lib/data'
 export function VenueGallery({
   images,
   name,
+  fallbackImage,
 }: {
   images: VenueImage[]
   name: string
+  fallbackImage?: string
 }) {
   const [current, setCurrent] = useState(0)
 
-  // Guard against empty images array
+  // Guard against empty images array -- show the fallback venue image
   if (!images || images.length === 0) {
+    const src = fallbackImage || '/images/venue-1.jpg'
     return (
       <div className="relative overflow-hidden rounded-2xl">
-        <div className="relative flex aspect-[16/9] items-center justify-center bg-secondary md:aspect-[2/1]">
-          <div className="text-center">
-            <p className="text-lg font-medium text-muted-foreground">{name}</p>
-            <p className="text-sm text-muted-foreground/60">No photos yet</p>
-          </div>
+        <div className="relative aspect-[16/9] md:aspect-[2/1]">
+          <Image
+            src={src}
+            alt={name}
+            fill
+            className="object-cover"
+            priority
+            sizes="(max-width: 768px) 100vw, 800px"
+          />
+          <span className="absolute bottom-3 right-3 rounded-full bg-foreground/50 px-2.5 py-1 text-[10px] text-primary-foreground backdrop-blur-sm">
+            Photo: SoftPlay UK
+          </span>
         </div>
       </div>
     )

@@ -56,7 +56,7 @@ function hydrateVenue(
     lng: Number(row.lng),
     phone: row.phone as string || '',
     website: row.website as string || '',
-    imageUrl: images[0]?.url || (row.image_url as string) || '/images/venue-1.jpg',
+    imageUrl: images[0]?.url || (row.image_url as string) || `/images/venue-${(Number(row.id) % 6) + 1}.jpg`,
     images,
     primaryCategory: 'soft_play',
     ageRange: { min: ageMin || 0, max: ageMax || 12 },
