@@ -67,7 +67,19 @@ function BlogGate() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...params }),
       })
-      const data = await res.json()
+      // Handle non-JSON or empty responses gracefully
+      const text = await res.text()
+      if (!text) {
+        setMessage(`Server returned empty response (status ${res.status}). The function may have timed out. Check server logs for [v0] entries.`)
+        return
+      }
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch {
+        setMessage(`Server returned invalid JSON (status ${res.status}): ${text.substring(0, 200)}`)
+        return
+      }
       setMessage(data.message || data.error || 'Done')
       if (data.errors && data.errors.length > 0) {
         setErrors(data.errors)

@@ -61,6 +61,7 @@ export async function POST(request: Request) {
   try { body = await request.json() } catch { body = {} }
 
   const action = (body.action as string) || 'generate_city'
+  console.log(`[v0] Blog POST received - action: ${action}, city: ${body.city || 'none'}, region: ${body.region || 'none'}`)
   const city = body.city as string | undefined
   const region = body.region as string | undefined
   const postId = body.postId ? Number(body.postId) : null
@@ -173,12 +174,15 @@ export async function POST(request: Request) {
 }
 
 async function generateCityPost(city: string, county: string, venueCount: number, autoPublish: boolean) {
+  console.log(`[v0] generateCityPost starting for: ${city}`)
+  
   // Get top venues in this city for internal linking
   const topVenues = await sql`
     SELECT name, slug, google_rating, category, description
     FROM venues WHERE status = 'active' AND LOWER(city) = LOWER(${city})
     ORDER BY google_rating DESC NULLS LAST LIMIT 8
   `
+  console.log(`[v0] Found ${topVenues.length} top venues for ${city}`)
 
   const venueList = topVenues.map((v, i) =>
     `${i + 1}. ${v.name} (${v.category || 'play venue'}${v.google_rating ? `, rated ${v.google_rating}/5` : ''})`
@@ -207,20 +211,30 @@ Respond with a JSON object containing these fields:
 - "meta_description": meta description for search results (max 155 chars)
 - "excerpt": short excerpt for blog listing pages (max 200 chars)`
 
-  const result = await generateText({
-    model: 'openai/gpt-4o-mini',
-    prompt,
-    output: Output.object({
-      schema: blogPostSchema,
-    }),
-  })
+  console.log(`[v0] Calling generateText for ${city}...`)
+  let result
+  try {
+    result = await generateText({
+      model: 'openai/gpt-4o-mini',
+      prompt,
+      output: Output.object({
+        schema: blogPostSchema,
+      }),
+    })
+    console.log(`[v0] generateText completed for ${city}. Text length: ${result.text?.length || 0}, Object keys: ${result.object ? Object.keys(result.object).join(',') : 'null'}`)
+  } catch (aiError) {
+    console.error(`[v0] generateText FAILED for ${city}:`, aiError)
+    throw new Error(`AI generation failed for ${city}: ${aiError instanceof Error ? aiError.message : String(aiError)}`)
+  }
 
   const post = result.object
   if (!post || !post.content) {
+    console.error(`[v0] AI returned empty object for ${city}. Text preview: ${result.text?.substring(0, 200)}`)
     throw new Error(`AI returned empty or invalid content for ${city}. Raw text length: ${result.text?.length || 0}`)
   }
 
   const wordCount = post.content.split(/\s+/).length
+  console.log(`[v0] Post for ${city}: "${post.title}" - ${wordCount} words`)
   if (wordCount < 100) {
     throw new Error(`AI content too short for ${city}: only ${wordCount} words`)
   }
@@ -228,13 +242,20 @@ Respond with a JSON object containing these fields:
   const slug = `best-soft-play-in-${slugify(city)}`
   const status = autoPublish ? 'published' : 'draft'
 
-  await sql`
-    INSERT INTO blog_posts (slug, title, content, excerpt, category, region, city, meta_title, meta_description, word_count, status, published_at)
-    VALUES (${slug}, ${post.title}, ${post.content}, ${post.excerpt}, ${'city-guide'}, ${county}, ${city}, ${post.meta_title}, ${post.meta_description}, ${wordCount}, ${status}, ${autoPublish ? new Date().toISOString() : null})
-  `
+  try {
+    await sql`
+      INSERT INTO blog_posts (slug, title, content, excerpt, category, region, city, meta_title, meta_description, word_count, status, published_at)
+      VALUES (${slug}, ${post.title}, ${post.content}, ${post.excerpt}, ${'city-guide'}, ${county}, ${city}, ${post.meta_title}, ${post.meta_description}, ${wordCount}, ${status}, ${autoPublish ? new Date().toISOString() : null})
+    `
+    console.log(`[v0] Inserted blog post for ${city} with slug: ${slug}`)
+  } catch (dbError) {
+    console.error(`[v0] DB insert FAILED for ${city}:`, dbError)
+    throw new Error(`Database insert failed for ${city}: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
+  }
 }
 
 async function generateRegionPost(region: string, venueCount: number, autoPublish: boolean) {
+  console.log(`[v0] generateRegionPost starting for: ${region}`)
   const topCities = await sql`
     SELECT city, COUNT(*) as cnt
     FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region}) AND city IS NOT NULL AND city != ''
@@ -268,20 +289,30 @@ Respond with a JSON object containing these fields:
 - "meta_description": meta description for search results (max 155 chars)
 - "excerpt": short excerpt for blog listing pages (max 200 chars)`
 
-  const result = await generateText({
-    model: 'openai/gpt-4o-mini',
-    prompt,
-    output: Output.object({
-      schema: blogPostSchema,
-    }),
-  })
+  console.log(`[v0] Calling generateText for region ${region}...`)
+  let result
+  try {
+    result = await generateText({
+      model: 'openai/gpt-4o-mini',
+      prompt,
+      output: Output.object({
+        schema: blogPostSchema,
+      }),
+    })
+    console.log(`[v0] generateText completed for ${region}. Text length: ${result.text?.length || 0}`)
+  } catch (aiError) {
+    console.error(`[v0] generateText FAILED for ${region}:`, aiError)
+    throw new Error(`AI generation failed for ${region}: ${aiError instanceof Error ? aiError.message : String(aiError)}`)
+  }
 
   const post = result.object
   if (!post || !post.content) {
+    console.error(`[v0] AI returned empty object for ${region}. Text preview: ${result.text?.substring(0, 200)}`)
     throw new Error(`AI returned empty or invalid content for ${region}. Raw text length: ${result.text?.length || 0}`)
   }
 
   const wordCount = post.content.split(/\s+/).length
+  console.log(`[v0] Post for ${region}: "${post.title}" - ${wordCount} words`)
   if (wordCount < 100) {
     throw new Error(`AI content too short for ${region}: only ${wordCount} words`)
   }
@@ -289,8 +320,14 @@ Respond with a JSON object containing these fields:
   const slug = `soft-play-centres-in-${slugify(region)}`
   const status = autoPublish ? 'published' : 'draft'
 
-  await sql`
-    INSERT INTO blog_posts (slug, title, content, excerpt, category, region, city, meta_title, meta_description, word_count, status, published_at)
-    VALUES (${slug}, ${post.title}, ${post.content}, ${post.excerpt}, ${'region-guide'}, ${region}, ${null}, ${post.meta_title}, ${post.meta_description}, ${wordCount}, ${status}, ${autoPublish ? new Date().toISOString() : null})
-  `
+  try {
+    await sql`
+      INSERT INTO blog_posts (slug, title, content, excerpt, category, region, city, meta_title, meta_description, word_count, status, published_at)
+      VALUES (${slug}, ${post.title}, ${post.content}, ${post.excerpt}, ${'region-guide'}, ${region}, ${null}, ${post.meta_title}, ${post.meta_description}, ${wordCount}, ${status}, ${autoPublish ? new Date().toISOString() : null})
+    `
+    console.log(`[v0] Inserted blog post for ${region} with slug: ${slug}`)
+  } catch (dbError) {
+    console.error(`[v0] DB insert FAILED for ${region}:`, dbError)
+    throw new Error(`Database insert failed for ${region}: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
+  }
 }
