@@ -47,7 +47,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
-// Simple markdown-to-HTML converter for blog content
 function renderMarkdown(content: string): string {
   return content
     .replace(/^### (.+)$/gm, '<h3 class="mt-8 mb-3 font-serif text-lg font-bold text-foreground">$1</h3>')
@@ -84,7 +83,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     },
     mainEntityOfPage: {
       '@type': 'WebPage',
-      '@id': `https://www.softplayuk.co.uk/blog/${post.slug}`,
+      '@id': `https://www.softplayuk.co.uk/blog/post/${post.slug}`,
     },
   }
 
@@ -97,7 +96,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
 
-        {/* Breadcrumb */}
         <nav className="mx-auto max-w-4xl px-4 py-4" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
             <li><Link href="/" className="transition-colors hover:text-foreground">Home</Link></li>
@@ -109,7 +107,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         </nav>
 
         <article className="mx-auto max-w-4xl px-4 pb-16">
-          {/* Header */}
           <header className="mb-10">
             <h1 className="mb-4 font-serif text-3xl font-bold text-balance text-foreground md:text-4xl lg:text-5xl">
               {post.title as string}
@@ -143,13 +140,11 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             )}
           </header>
 
-          {/* Body */}
           <div
             className="prose-custom"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content as string) }}
           />
 
-          {/* CTA */}
           <div className="mt-12 rounded-2xl border border-border bg-primary/5 p-6 text-center">
             <h3 className="mb-2 font-serif text-xl font-bold text-foreground">
               Find your perfect play venue
@@ -177,7 +172,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             </div>
           </div>
 
-          {/* Related posts */}
           {related.length > 0 && (
             <section className="mt-12">
               <h2 className="mb-6 font-serif text-2xl font-bold text-foreground">More guides</h2>
@@ -185,7 +179,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                 {related.map((r) => (
                   <Link
                     key={r.slug as string}
-                    href={`/blog/${r.slug}`}
+                    href={`/blog/post/${r.slug}`}
                     className="group rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/30"
                   >
                     <h3 className="mb-2 font-serif text-base font-bold text-foreground transition-colors group-hover:text-primary line-clamp-2">

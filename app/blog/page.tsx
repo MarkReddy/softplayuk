@@ -99,7 +99,7 @@ export default async function BlogPage() {
                 {publishedPosts.map((post) => (
                   <Link
                     key={post.slug as string}
-                    href={`/blog/${post.slug}`}
+                    href={`/blog/post/${post.slug}`}
                     className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-sm"
                   >
                     <h3 className="mb-2 font-serif text-base font-bold text-foreground transition-colors group-hover:text-primary line-clamp-2">

@@ -218,7 +218,7 @@ function BlogGate() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {post.status === 'published' && (
-                    <Link href={`/blog/${post.slug}`} target="_blank">
+                    <Link href={`/blog/post/${post.slug}`} target="_blank">
                       <Button variant="ghost" size="sm">View</Button>
                     </Link>
                   )}

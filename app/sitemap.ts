@@ -57,7 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const blogPosts = await sql`SELECT slug, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC`
     for (const bp of blogPosts) {
       entries.push({
-        url: `${BASE_URL}/blog/${bp.slug}`,
+        url: `${BASE_URL}/blog/post/${bp.slug}`,
         lastModified: bp.published_at ? new Date(bp.published_at as string) : new Date(),
         changeFrequency: 'monthly',
         priority: 0.7,
