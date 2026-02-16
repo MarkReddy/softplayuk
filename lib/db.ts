@@ -20,7 +20,7 @@ function sql(strings: TemplateStringsArray, ...values: unknown[]) {
 }
 
 // ─── Row → Venue Hydrator ──────────────────────────────────
-function hydrateVenue(
+export function hydrateVenue(
   row: Record<string, unknown>,
   images: VenueImage[],
   hours: OpeningHours,
@@ -80,7 +80,7 @@ function hydrateVenue(
 }
 
 // ─── Fetch Related Data for a Venue ────────────────────────
-async function fetchVenueRelations(venueId: number) {
+export async function fetchVenueRelations(venueId: number) {
   const [imageRows, hoursRows, sourceRows] = await Promise.all([
     sql`SELECT * FROM venue_images WHERE venue_id = ${venueId} ORDER BY is_primary DESC, id ASC`,
     sql`SELECT * FROM venue_opening_hours WHERE venue_id = ${venueId} ORDER BY day_of_week ASC`,

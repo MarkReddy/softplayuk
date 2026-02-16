@@ -135,6 +135,7 @@ export default async function CityPage({
               <div className="flex flex-wrap gap-2">
                 {allCityPages
                   .filter((c) => c.slug !== city)
+                  .slice(0, 30)
                   .map((c) => (
                     <Link
                       key={c.slug}

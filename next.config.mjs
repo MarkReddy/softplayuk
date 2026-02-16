@@ -5,6 +5,7 @@ const nextConfig = {
   },
   images: {
     localPatterns: [
+      { pathname: '/images/**' },
       { pathname: '/api/venue-photo', search: '' },
     ],
     remotePatterns: [

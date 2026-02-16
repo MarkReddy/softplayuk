@@ -16,7 +16,6 @@ export default function GenerateContentPage() {
 
 function GenerateContentGate() {
   const { isAuthenticated, fetchWithAuth } = useAdminAuth()
-  if (!isAuthenticated) return <AdminLogin />
   const [running, setRunning] = useState(false)
   const [log, setLog] = useState<string[]>([])
   const [progress, setProgress] = useState({ processed: 0, total: 0 })
@@ -37,6 +36,8 @@ function GenerateContentGate() {
     if (!res.ok) throw new Error(data.error || 'Failed')
     return data.done ? -1 : data.nextOffset
   }, [fetchWithAuth, batchSize, type])
+
+  if (!isAuthenticated) return <AdminLogin />
 
   const handleStart = async () => {
     setRunning(true)
