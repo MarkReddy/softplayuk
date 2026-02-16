@@ -4,10 +4,6 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    localPatterns: [
-      { pathname: '/images/**' },
-      { pathname: '/api/venue-photo', search: '' },
-    ],
     remotePatterns: [
       { protocol: 'https', hostname: 'maps.googleapis.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
