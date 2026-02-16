@@ -1,3 +1,4 @@
+// Cache-busted: all next/image removed, using native img tags
 export const dynamic = 'force-dynamic'
 
 import { SiteHeader } from '@/components/site-header'

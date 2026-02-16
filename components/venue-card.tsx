@@ -1,4 +1,5 @@
 import Link from "next/link"
+// Cache-busted: all next/image removed, using native img tags
 import { Star, Car, Coffee, Heart, PartyPopper, MapPin, Clock, Wifi, Baby, TreePine } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { Venue, SearchResult } from "@/lib/types"
