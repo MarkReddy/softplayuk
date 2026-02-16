@@ -70,6 +70,9 @@ export function BackfillDashboard() {
     setDryRunResult(null)
     setLastStartedId(null)
     try {
+      // The API creates the run and returns immediately.
+      // Execution happens in the background via next/server after().
+      // The dashboard polls /api/admin/backfill/runs every 5s for live progress.
       const res = await fetchWithAuth('/api/admin/backfill/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,15 +180,16 @@ export function BackfillDashboard() {
 
           {lastStartedId && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">
-              Run #{lastStartedId} started.{' '}
+              Run #{lastStartedId} started! It is now running in the background.{' '}
               <Link href={`/admin/backfill/runs/${lastStartedId}`} className="font-medium underline">
-                View progress
+                View live progress
               </Link>
+              {' '}or check the Run History below (auto-refreshes every 5s).
             </div>
           )}
 
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleDryRun} disabled={!canStart}>
+            <Button variant="outline" onClick={handleDryRun} disabled={!canStart || starting}>
               Dry Run (preview cells)
             </Button>
             <Button onClick={handleStart} disabled={starting || !canStart}>

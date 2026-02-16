@@ -25,7 +25,9 @@ export async function searchCell(
   const seen = new Set<string>()
   const venues: DiscoveredVenue[] = []
 
-  for (const keyword of ['soft play', 'indoor play centre', 'childrens play centre']) {
+  const keywords = ['soft play', 'indoor play centre', 'childrens play centre']
+
+  for (const keyword of keywords) {
     let nextPageToken: string | undefined
     let page = 0
 
@@ -39,11 +41,30 @@ export async function searchCell(
       })
       if (nextPageToken) params.set('pagetoken', nextPageToken)
 
+      console.log(`[v0] Google Nearby Search: keyword="${keyword}" page=${page} location=${lat},${lng}`)
+
       const res = await fetch(`${BASE}/nearbysearch/json?${params}`)
+      if (!res.ok) {
+        console.error(`[v0] Google API HTTP error: ${res.status} ${res.statusText}`)
+        break
+      }
+
       const data = await res.json()
 
-      if (data.status === 'OVER_QUERY_LIMIT') break
-      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') break
+      console.log(`[v0] Google response status: ${data.status}, results: ${(data.results || []).length}`)
+
+      if (data.status === 'OVER_QUERY_LIMIT') {
+        console.error('[v0] Google API: OVER_QUERY_LIMIT - stopping searches')
+        break
+      }
+      if (data.status === 'REQUEST_DENIED') {
+        console.error('[v0] Google API: REQUEST_DENIED -', data.error_message || 'check API key')
+        throw new Error(`Google API REQUEST_DENIED: ${data.error_message || 'Invalid API key or API not enabled'}`)
+      }
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+        console.error(`[v0] Google API unexpected status: ${data.status}`, data.error_message)
+        break
+      }
 
       for (const place of data.results || []) {
         const pid = place.place_id as string
@@ -72,10 +93,12 @@ export async function searchCell(
 
       nextPageToken = data.next_page_token
       page++
+      // Google requires a short delay before using next_page_token
       if (nextPageToken) await sleep(2200)
     } while (nextPageToken && page < 3)
   }
 
+  console.log(`[v0] searchCell total: ${venues.length} unique venues from (${lat}, ${lng})`)
   return venues
 }
 
@@ -91,9 +114,16 @@ export async function enrichVenue(googlePlaceId: string): Promise<Partial<Discov
   })
 
   const res = await fetch(`${BASE}/details/json?${params}`)
-  if (!res.ok) return null
+  if (!res.ok) {
+    console.error(`[v0] Place Details HTTP error: ${res.status}`)
+    return null
+  }
+
   const data = await res.json()
-  if (data.status !== 'OK') return null
+  if (data.status !== 'OK') {
+    console.error(`[v0] Place Details status: ${data.status}`, data.error_message)
+    return null
+  }
 
   const r = data.result || {}
   const components = r.address_components || []
@@ -109,12 +139,11 @@ export async function enrichVenue(googlePlaceId: string): Promise<Partial<Discov
   const hours = (r.opening_hours?.periods || [])
     .filter((p: { open?: unknown; close?: unknown }) => p.open && p.close)
     .map((p: { open: { day: number; time: string }; close: { time: string } }) => ({
-      day: p.open.day, // numeric 0=Sunday..6=Saturday, matching day_of_week column
+      day: p.open.day,
       open: `${String(p.open.time).slice(0, 2)}:${String(p.open.time).slice(2)}`,
       close: `${String(p.close.time).slice(0, 2)}:${String(p.close.time).slice(2)}`,
     }))
 
-  // Extract up to 10 photo references from Place Details
   const photoRefs: string[] = (r.photos || [])
     .slice(0, 10)
     .map((p: { photo_reference: string }) => p.photo_reference)

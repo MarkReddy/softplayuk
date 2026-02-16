@@ -22,6 +22,7 @@ interface CityRow {
 
 const ENDPOINTS = [
   { label: 'Health Check', path: '/api/health', method: 'GET' },
+  { label: 'Google Places Test', path: '/api/admin/backfill/test-google', method: 'GET' },
   { label: 'Venue Count', path: '/api/venues/count', method: 'GET' },
   { label: 'Venues (page 1)', path: '/api/venues?limit=5&offset=0', method: 'GET' },
   { label: 'Venues (page 2)', path: '/api/venues?limit=5&offset=5', method: 'GET' },

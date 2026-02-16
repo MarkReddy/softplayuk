@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { createRun, executeRun } from '@/lib/backfill/engine'
 import { generateGrid, type BackfillConfig, type BackfillMode } from '@/lib/backfill/types'
@@ -52,19 +53,31 @@ export async function POST(request: Request) {
       })
     }
 
+    // Step 1: Create the run row (fast, synchronous DB insert)
+    console.log('[v0] Creating backfill run with config:', JSON.stringify(config))
     const runId = await createRun(config)
+    console.log('[v0] Created run', runId)
 
-    // Fire and forget
-    executeRun(runId).catch((err) => {
-      console.error(`[v0] Backfill run ${runId} failed:`, err)
+    // Step 2: Schedule the ACTUAL execution to run AFTER the response is sent.
+    // next/server after() keeps the Vercel function alive for up to maxDuration (300s)
+    // even after the HTTP response has been returned to the client.
+    // This is the officially supported Vercel pattern for background work.
+    after(async () => {
+      console.log('[v0] after() triggered - starting executeRun for run', runId)
+      try {
+        const result = await executeRun(runId)
+        console.log('[v0] Run', runId, 'finished:', result.status,
+          '| discovered:', result.discovered, '| inserted:', result.inserted)
+      } catch (err) {
+        console.error('[v0] after() executeRun error for run', runId, ':', err)
+      }
     })
 
+    // Step 3: Return immediately - the dashboard polls /api/admin/backfill/runs for progress
     return NextResponse.json({
       runId,
-      mode,
-      region: region || city || 'Full UK',
       status: 'started',
-      message: `Backfill run #${runId} started. Monitor at /admin/backfill/runs/${runId}`,
+      message: `Backfill run #${runId} is now running in the background. Monitor progress in the run history.`,
     })
   } catch (err) {
     console.error('[v0] Backfill start error:', err)
