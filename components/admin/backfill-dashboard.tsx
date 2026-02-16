@@ -70,7 +70,8 @@ export function BackfillDashboard() {
     setDryRunResult(null)
     setLastStartedId(null)
     try {
-      // The API awaits the full execution (up to 5 min on Vercel).
+      // The API creates the run and returns immediately.
+      // Execution happens in the background via next/server after().
       // The dashboard polls /api/admin/backfill/runs every 5s for live progress.
       const res = await fetchWithAuth('/api/admin/backfill/start', {
         method: 'POST',
@@ -177,19 +178,13 @@ export function BackfillDashboard() {
             </div>
           )}
 
-          {starting && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
-              Backfill is running. Check the Run History below for live progress (refreshes every 5s).
-              You can safely navigate to the run detail page while this runs.
-            </div>
-          )}
-
-          {lastStartedId && !starting && (
+          {lastStartedId && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">
-              Run #{lastStartedId} completed.{' '}
+              Run #{lastStartedId} started! It is now running in the background.{' '}
               <Link href={`/admin/backfill/runs/${lastStartedId}`} className="font-medium underline">
-                View results
+                View live progress
               </Link>
+              {' '}or check the Run History below (auto-refreshes every 5s).
             </div>
           )}
 
@@ -198,7 +193,7 @@ export function BackfillDashboard() {
               Dry Run (preview cells)
             </Button>
             <Button onClick={handleStart} disabled={starting || !canStart}>
-              {starting ? 'Running backfill...' : 'Start Backfill'}
+              {starting ? 'Starting...' : 'Start Backfill'}
             </Button>
           </div>
         </CardContent>

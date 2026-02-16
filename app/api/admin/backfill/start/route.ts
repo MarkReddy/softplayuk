@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { createRun, executeRun } from '@/lib/backfill/engine'
 import { generateGrid, type BackfillConfig, type BackfillMode } from '@/lib/backfill/types'
@@ -52,28 +53,31 @@ export async function POST(request: Request) {
       })
     }
 
+    // Step 1: Create the run row (fast, synchronous DB insert)
     console.log('[v0] Creating backfill run with config:', JSON.stringify(config))
     const runId = await createRun(config)
-    console.log('[v0] Created run', runId, '- starting execution')
+    console.log('[v0] Created run', runId)
 
-    // Await execution directly. maxDuration=300 keeps the function alive for up to 5 min.
-    // The dashboard polls /api/admin/backfill/runs for live progress during execution.
-    const result = await executeRun(runId)
+    // Step 2: Schedule the ACTUAL execution to run AFTER the response is sent.
+    // next/server after() keeps the Vercel function alive for up to maxDuration (300s)
+    // even after the HTTP response has been returned to the client.
+    // This is the officially supported Vercel pattern for background work.
+    after(async () => {
+      console.log('[v0] after() triggered - starting executeRun for run', runId)
+      try {
+        const result = await executeRun(runId)
+        console.log('[v0] Run', runId, 'finished:', result.status,
+          '| discovered:', result.discovered, '| inserted:', result.inserted)
+      } catch (err) {
+        console.error('[v0] after() executeRun error for run', runId, ':', err)
+      }
+    })
 
-    console.log('[v0] Run', runId, 'finished with status:', result.status,
-      '| discovered:', result.discovered, '| inserted:', result.inserted,
-      '| updated:', result.updated, '| failed:', result.failed)
-
+    // Step 3: Return immediately - the dashboard polls /api/admin/backfill/runs for progress
     return NextResponse.json({
       runId,
-      status: result.status,
-      discovered: result.discovered,
-      inserted: result.inserted,
-      updated: result.updated,
-      enriched: result.enriched,
-      failed: result.failed,
-      skipped: result.skipped,
-      durationMs: result.durationMs,
+      status: 'started',
+      message: `Backfill run #${runId} is now running in the background. Monitor progress in the run history.`,
     })
   } catch (err) {
     console.error('[v0] Backfill start error:', err)
