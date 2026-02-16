@@ -204,20 +204,33 @@ export default async function VenueDetailPage({
               {/* About */}
               <div className="mb-8 rounded-2xl border border-border bg-card p-6">
                 <h2 className="mb-3 font-serif text-xl font-bold text-foreground">About</h2>
-                <p className="leading-relaxed text-muted-foreground">{venue.description}</p>
+                {venue.description ? (
+                  <p className="leading-relaxed text-muted-foreground">{venue.description}</p>
+                ) : (
+                  <p className="leading-relaxed text-muted-foreground italic">
+                    Information about {venue.name} is being compiled. Check back soon for a full description,
+                    or visit their website for more details.
+                  </p>
+                )}
               </div>
 
               {/* Facilities */}
               <div className="mb-8 rounded-2xl border border-border bg-card p-6">
                 <h2 className="mb-4 font-serif text-xl font-bold text-foreground">Facilities</h2>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  {venue.amenities.map((amenity) => (
-                    <div key={amenity.id} className="flex items-center gap-2.5 rounded-xl bg-secondary p-3">
-                      <div className="text-primary">{amenityIconMap[amenity.icon] || <ShieldCheck className="h-4 w-4" />}</div>
-                      <span className="text-sm font-medium text-foreground">{amenity.name}</span>
-                    </div>
-                  ))}
-                </div>
+                {venue.amenities.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                    {venue.amenities.map((amenity) => (
+                      <div key={amenity.id} className="flex items-center gap-2.5 rounded-xl bg-secondary p-3">
+                        <div className="text-primary">{amenityIconMap[amenity.icon] || <ShieldCheck className="h-4 w-4" />}</div>
+                        <span className="text-sm font-medium text-foreground">{amenity.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="leading-relaxed text-muted-foreground italic">
+                    Facilities information for {venue.name} is being compiled. Contact the venue directly for details about what they offer.
+                  </p>
+                )}
               </div>
 
               {/* Data provenance */}
@@ -323,22 +336,35 @@ export default async function VenueDetailPage({
                     <Clock className="h-4 w-4 text-primary" />
                     Opening hours
                   </h3>
-                  {isPublicArea(venue.primaryCategory) && Object.values(venue.openingHours).every((h) => h === 'Closed') ? (
-                    <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      Open 24 hours -- public access
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {days.map((day) => (
-                        <li key={day} className="flex items-center justify-between text-sm">
-                          <span className="capitalize text-muted-foreground">{day}</span>
-                          <span className={`font-medium ${venue.openingHours[day] === 'Closed' ? 'text-destructive' : 'text-foreground'}`}>
-                            {venue.openingHours[day]}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {(() => {
+                    const allClosed = Object.values(venue.openingHours).every((h) => h === 'Closed')
+                    if (isPublicArea(venue.primaryCategory) && allClosed) {
+                      return (
+                        <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                          Open 24 hours -- public access
+                        </p>
+                      )
+                    }
+                    if (allClosed) {
+                      return (
+                        <p className="text-sm text-muted-foreground italic">
+                          Opening hours not yet available. Please contact the venue or check their website for current times.
+                        </p>
+                      )
+                    }
+                    return (
+                      <ul className="space-y-2">
+                        {days.map((day) => (
+                          <li key={day} className="flex items-center justify-between text-sm">
+                            <span className="capitalize text-muted-foreground">{day}</span>
+                            <span className={`font-medium ${venue.openingHours[day] === 'Closed' ? 'text-destructive' : 'text-foreground'}`}>
+                              {venue.openingHours[day]}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  })()}
                 </div>
 
                 <div className="rounded-2xl border border-border bg-card p-5">

@@ -11,19 +11,18 @@ import { VenuesNearYou } from '@/components/venues-near-you'
 import { LiveViewers } from '@/components/live-viewers'
 
 export default function HomePage() {
+  console.log("[v0] HomePage rendering with native img tags - no next/image")
   return (
     <>
       <SiteHeader />
       <main>
-        {/* Hero — split layout: left message, right warm imagery */}
+        {/* Hero section */}
         <section className="relative overflow-hidden">
-          {/* Organic pastel blobs */}
           <div className="absolute -left-32 top-0 h-80 w-80 rounded-full bg-[hsl(var(--wash-peach))] opacity-50 blur-3xl" />
           <div className="absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-[hsl(var(--wash-sage))] opacity-40 blur-3xl" />
           <div className="absolute left-1/2 top-1/3 h-48 w-48 rounded-full bg-[hsl(var(--wash-lavender))] opacity-30 blur-3xl" />
 
           <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-10 px-5 pb-16 pt-16 md:flex-row md:items-center md:pb-20 md:pt-24">
-            {/* Left: message */}
             <div className="flex flex-1 flex-col items-center text-center md:items-start md:text-left">
               <h1 className="mb-5 max-w-md text-balance text-3xl font-bold leading-snug text-foreground md:text-4xl lg:text-[2.75rem]">
                 Find the best soft play centres near you
@@ -38,9 +37,9 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Right: warm image with organic mask */}
             <div className="relative flex-1">
               <div className="relative mx-auto aspect-[4/3] max-w-md overflow-hidden rounded-[2rem] shadow-lg" style={{ borderRadius: '42% 58% 62% 38% / 45% 55% 45% 55%' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/images/hero-softplay.jpg"
                   alt="Children playing happily in a bright, colourful soft play centre"
@@ -48,7 +47,6 @@ export default function HomePage() {
                   fetchPriority="high"
                 />
               </div>
-              {/* Small decorative dot */}
               <div className="absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-[hsl(var(--wash-clay))]" />
               <div className="absolute -right-3 -top-3 h-10 w-10 rounded-full bg-[hsl(var(--wash-sage))]" />
             </div>
@@ -62,7 +60,6 @@ export default function HomePage() {
         <FeaturedVenues />
         <PopularSearches />
 
-        {/* SEO content section */}
         <section className="relative overflow-hidden py-20">
           <div className="absolute -right-40 top-0 h-72 w-72 rounded-full bg-[hsl(var(--wash-lavender))] opacity-30 blur-3xl" />
           <div className="relative mx-auto max-w-2xl px-5 text-center">

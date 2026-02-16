@@ -16,12 +16,12 @@ export function VenueGallery({
 }) {
   const [current, setCurrent] = useState(0)
 
-  // Guard against empty images array -- show the fallback venue image
   if (!images || images.length === 0) {
     const src = fallbackImage || '/images/venue-1.jpg'
     return (
       <div className="relative overflow-hidden rounded-2xl">
         <div className="relative aspect-[16/9] md:aspect-[2/1]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} alt={name} className="absolute inset-0 h-full w-full object-cover" />
           <span className="absolute bottom-3 right-3 rounded-full bg-foreground/50 px-2.5 py-1 text-[10px] text-primary-foreground backdrop-blur-sm">
             Photo: SoftPlay UK
@@ -36,8 +36,8 @@ export function VenueGallery({
   return (
     <div className="relative overflow-hidden rounded-2xl">
       <div className="relative aspect-[16/9] md:aspect-[2/1]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={img.url} alt={`${name} - Photo ${current + 1}`} className="absolute inset-0 h-full w-full object-cover" />
-        {/* Source attribution overlay */}
         <span className="absolute bottom-3 right-3 rounded-full bg-foreground/50 px-2.5 py-1 text-[10px] text-primary-foreground backdrop-blur-sm">
           Photo: {img.attribution || getSourceLabel(img.source)}
         </span>

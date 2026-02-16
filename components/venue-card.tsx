@@ -36,6 +36,7 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
+  console.log("[v0] VenueCard rendering with native img tags - no next/image")
   const blended = getBlendedRating(venue)
   const totalReviews = (venue.googleReviewCount || 0) + venue.firstPartyReviewCount
 
@@ -44,8 +45,9 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
       href={`/venue/${venue.slug}`}
       className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
     >
-      {/* Image */}
+      {/* Image - native img, no next/image */}
       <div className="relative aspect-[16/10] overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={venue.imageUrl}
           alt={`${venue.name} soft play centre`}
@@ -62,7 +64,6 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
             Featured
           </span>
         )}
-        {/* Source attribution */}
         <span className="absolute bottom-2 right-2 rounded-full bg-card/70 px-2 py-0.5 text-[10px] text-muted-foreground backdrop-blur-sm">
           via {getSourceLabel(venue.sourcePriority)}
         </span>
@@ -70,7 +71,6 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
 
       {/* Content */}
       <div className="flex flex-1 flex-col gap-2.5 p-4">
-        {/* Title + blended rating */}
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-balance font-serif text-lg font-bold leading-tight text-foreground group-hover:text-primary">
             {venue.name}
@@ -83,7 +83,6 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
           </div>
         </div>
 
-        {/* Stars + review counts */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <StarRating rating={blended} />
           <span className="text-xs text-muted-foreground">
@@ -96,7 +95,6 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
           )}
         </div>
 
-        {/* Location + distance */}
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <MapPin className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">
@@ -109,12 +107,10 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
           )}
         </div>
 
-        {/* Description */}
         <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
           {venue.shortDescription}
         </p>
 
-        {/* Badges row: category, age, price, SEN */}
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge className={`text-xs font-medium ${getCategoryStyle(venue.primaryCategory).bg} ${getCategoryStyle(venue.primaryCategory).text} border-0`}>
             {getCategoryLabel(venue.primaryCategory)}
@@ -132,7 +128,6 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
           )}
         </div>
 
-        {/* Amenities */}
         <div className="flex flex-wrap gap-1.5">
           {venue.amenities.slice(0, 4).map((amenity) => (
             <div
@@ -145,7 +140,6 @@ export function VenueCard({ venue }: { venue: Venue | SearchResult }) {
           ))}
         </div>
 
-        {/* Footer: opening hours hint */}
         <div className="mt-auto flex items-center gap-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
           <span>

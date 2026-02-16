@@ -53,6 +53,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       })
     }
 
+    // Published blog posts
+    const blogPosts = await sql`SELECT slug, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC`
+    for (const bp of blogPosts) {
+      entries.push({
+        url: `${BASE_URL}/blog/post/${bp.slug}`,
+        lastModified: bp.published_at ? new Date(bp.published_at as string) : new Date(),
+        changeFrequency: 'monthly',
+        priority: 0.7,
+      })
+    }
+
     // Individual venue pages (top 2000 by rating)
     const venues = await sql`
       SELECT slug FROM venues WHERE status = 'active' AND slug IS NOT NULL
