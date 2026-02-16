@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     'toddler soft play',
   ],
   openGraph: {
-    title: 'Softplay UK - Find the Best Soft Play Centres Near You',
+    title: 'SoftPlay UK - Find the Best Soft Play Centres Near You',
     description:
-      'Discover the best soft play centres for kids across the UK. Trusted reviews, real parent insights.',
+      'Trusted by over 40,000 parents across more than 2,000 venues. The UK\'s most comprehensive soft play and children\'s activity site.',
     type: 'website',
     locale: 'en_GB',
   },

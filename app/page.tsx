@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { PostcodeSearch } from '@/components/postcode-search'
@@ -27,8 +28,8 @@ export default function HomePage() {
                 Find the best soft play centres near you
               </h1>
               <p className="mb-8 max-w-sm text-pretty text-base leading-relaxed text-muted-foreground">
-                Trusted reviews from real parents. Search by postcode, filter by
-                what matters, and discover somewhere lovely.
+                Trusted by over 40,000 parents across more than 2,000 venues.
+                Find the best soft play centres near you.
               </p>
               <PostcodeSearch size="lg" />
               <p className="mt-4 text-xs text-muted-foreground/70">
@@ -63,20 +64,26 @@ export default function HomePage() {
           <div className="absolute -right-40 top-0 h-72 w-72 rounded-full bg-[hsl(var(--wash-lavender))] opacity-30 blur-3xl" />
           <div className="relative mx-auto max-w-2xl px-5 text-center">
             <h2 className="mb-5 text-2xl font-bold text-foreground">
-              The UK&apos;s trusted soft play directory
+              The UK&apos;s most comprehensive soft play and children&apos;s activity site
             </h2>
             <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-              Softplay UK helps thousands of UK parents find the perfect
-              indoor play centre for their children. Whether you are looking for
-              a toddler-friendly space, a large adventure play world, or a calm
-              sensory-friendly venue, we have you covered.
+              SoftPlay UK is trusted by over 40,000 parents across more than
+              2,000 venues. Whether you&apos;re looking for a toddler-friendly
+              space, a large adventure play world, or a calm sensory-friendly
+              venue, we&apos;ve got you covered.
             </p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
+            <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
               Every venue is reviewed by real parents who care about the same
               things you do: cleanliness, safety, age-appropriate equipment, and
-              good coffee. Search by postcode, filter by what matters, and
-              discover your family&apos;s next favourite day out.
+              good coffee. Our verified reviews and detailed facility guides
+              help you make the best choice for your family.
             </p>
+            <Link
+              href="/search"
+              className="inline-flex items-center rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Find the best soft play centres near you
+            </Link>
           </div>
         </section>
       </main>

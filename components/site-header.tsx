@@ -10,11 +10,11 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
-        <Link href="/" className="flex items-baseline gap-1.5">
-          <span className="text-xl font-bold tracking-tight text-foreground">
-            Softplay
+        <Link href="/" className="flex items-baseline">
+          <span className="text-2xl font-extrabold tracking-tight text-foreground">
+            Soft<span className="text-primary">Play</span>
           </span>
-          <span className="text-xl font-extrabold tracking-tight text-primary">
+          <span className="ml-1.5 text-2xl font-extrabold tracking-tight text-[hsl(var(--wash-clay))]">
             UK
           </span>
         </Link>

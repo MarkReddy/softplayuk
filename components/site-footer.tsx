@@ -29,17 +29,18 @@ export function SiteFooter() {
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div>
-            <Link href="/" className="mb-4 flex items-baseline gap-1.5">
-              <span className="text-lg font-bold tracking-tight text-foreground">
-                Softplay
+            <Link href="/" className="mb-4 flex items-baseline">
+              <span className="text-xl font-extrabold tracking-tight text-foreground">
+                Soft<span className="text-primary">Play</span>
               </span>
-              <span className="text-lg font-extrabold tracking-tight text-primary">
+              <span className="ml-1.5 text-xl font-extrabold tracking-tight text-[hsl(var(--wash-clay))]">
                 UK
               </span>
             </Link>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-              Helping UK parents find the best soft play centres for their
-              children. Trusted reviews, real insights, always free.
+              Trusted by over 40,000 parents across more than 2,000 venues.
+              The UK&apos;s most comprehensive soft play and children&apos;s
+              activity site.
             </p>
           </div>
 
@@ -154,7 +155,7 @@ export function SiteFooter() {
 
         <div className="mt-12 border-t border-border/50 pt-6">
           <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
-            <p>Softplay UK. Made with care for UK parents.</p>
+            <p>SoftPlay UK. Made with care for UK parents.</p>
             <p>
               <Link href="/privacy-policy" className="underline hover:text-foreground">
                 Privacy
