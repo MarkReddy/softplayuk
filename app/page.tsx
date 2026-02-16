@@ -9,6 +9,7 @@ import { TrustSignals } from '@/components/trust-signals'
 import { PopularSearches } from '@/components/popular-searches'
 import { FeaturedVenues } from '@/components/featured-venues'
 import { VenuesNearYou } from '@/components/venues-near-you'
+import { LiveViewers } from '@/components/live-viewers'
 
 export default function HomePage() {
   return (
@@ -58,6 +59,7 @@ export default function HomePage() {
         </section>
 
         <TrustSignals />
+        <LiveViewers />
         <VenuesNearYou />
         <HowItWorks />
         <FeaturedVenues />
