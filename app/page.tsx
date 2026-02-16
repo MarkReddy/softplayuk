@@ -8,6 +8,7 @@ import { HowItWorks } from '@/components/how-it-works'
 import { TrustSignals } from '@/components/trust-signals'
 import { PopularSearches } from '@/components/popular-searches'
 import { FeaturedVenues } from '@/components/featured-venues'
+import { VenuesNearYou } from '@/components/venues-near-you'
 
 export default function HomePage() {
   return (
@@ -57,6 +58,7 @@ export default function HomePage() {
         </section>
 
         <TrustSignals />
+        <VenuesNearYou />
         <HowItWorks />
         <FeaturedVenues />
         <PopularSearches />
