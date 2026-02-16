@@ -2,7 +2,16 @@
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
-  }
+  },
+  images: {
+    localPatterns: [
+      { pathname: '/api/venue-photo', search: '' },
+    ],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'maps.googleapis.com' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+    ],
+  },
 }
 
 export default nextConfig
