@@ -37,6 +37,7 @@ export async function searchCell(
         radius: String(Math.min(radiusMetres, 50000)),
         keyword,
         type: 'establishment',
+        region: 'uk',
         key,
       })
       if (nextPageToken) params.set('pagetoken', nextPageToken)
@@ -127,6 +128,19 @@ export async function enrichVenue(googlePlaceId: string): Promise<Partial<Discov
 
   const r = data.result || {}
   const components = r.address_components || []
+
+  // Country validation -- reject anything not in the UK
+  let country = ''
+  for (const c of components) {
+    if (c.types?.includes('country')) {
+      country = c.long_name
+      break
+    }
+  }
+  if (country && country !== 'United Kingdom' && country !== 'UK') {
+    console.log(`[v0] Rejecting non-UK venue: country="${country}" for place ${googlePlaceId}`)
+    return { _rejected: true } as unknown as Partial<DiscoveredVenue>
+  }
 
   let postcode = '', county = '', city = ''
   for (const c of components) {

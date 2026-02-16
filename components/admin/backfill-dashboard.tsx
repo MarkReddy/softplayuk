@@ -99,6 +99,9 @@ export function BackfillDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/admin/generate-content">
+            <Button variant="outline" size="sm">Generate Content</Button>
+          </Link>
           <Link href="/admin/api-test">
             <Button variant="outline" size="sm">API Tests</Button>
           </Link>

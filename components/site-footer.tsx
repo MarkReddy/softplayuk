@@ -110,6 +110,11 @@ export function SiteFooter() {
                   Browse by Region
                 </Link>
               </li>
+              <li>
+                <Link href="/blog" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  Guides
+                </Link>
+              </li>
             </ul>
 
             <h3 className="mb-4 mt-6 text-sm font-semibold text-foreground">

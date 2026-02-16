@@ -2,6 +2,34 @@ import type { Venue, DataSource } from './types'
 
 // ─── Pure Utility Functions (no data, no DB) ───────────────
 
+export function getCategoryLabel(category: string): string {
+  switch (category) {
+    case 'soft_play': return 'Soft Play Centre'
+    case 'playground': return 'Public Play Area'
+    case 'trampoline_park': return 'Trampoline Park'
+    case 'adventure': return 'Adventure Play'
+    case 'farm': return 'Farm Park'
+    case 'park': return 'Public Park'
+    case 'zoo': return 'Zoo / Aquarium'
+    default: return 'Play Venue'
+  }
+}
+
+export function getCategoryStyle(category: string): { bg: string; text: string } {
+  switch (category) {
+    case 'soft_play': return { bg: 'bg-primary/10', text: 'text-primary' }
+    case 'playground': return { bg: 'bg-emerald-100 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-400' }
+    case 'trampoline_park': return { bg: 'bg-amber-100 dark:bg-amber-950', text: 'text-amber-700 dark:text-amber-400' }
+    case 'adventure': return { bg: 'bg-orange-100 dark:bg-orange-950', text: 'text-orange-700 dark:text-orange-400' }
+    case 'farm': return { bg: 'bg-lime-100 dark:bg-lime-950', text: 'text-lime-700 dark:text-lime-400' }
+    default: return { bg: 'bg-secondary', text: 'text-muted-foreground' }
+  }
+}
+
+export function isPublicArea(category: string): boolean {
+  return ['playground', 'park'].includes(category)
+}
+
 export function isValidUKPostcode(postcode: string): boolean {
   const pattern = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i
   return pattern.test(postcode.trim())

@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   const city = searchParams.get('city') || ''
   const q = searchParams.get('q') || ''
   const postcode = searchParams.get('postcode') || ''
+  const category = searchParams.get('category') || ''
 
   try {
     // Text search takes priority

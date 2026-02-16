@@ -27,6 +27,9 @@ export function SiteHeader() {
           <Link href="/regions" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
             Browse by Region
           </Link>
+          <Link href="/blog" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            Guides
+          </Link>
         </nav>
 
         {/* Mobile menu button */}
@@ -48,6 +51,9 @@ export function SiteHeader() {
             </Link>
             <Link href="/regions" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
               Browse by Region
+            </Link>
+            <Link href="/blog" onClick={() => setOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+              Guides
             </Link>
           </div>
         </nav>

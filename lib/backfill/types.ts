@@ -61,7 +61,9 @@ export interface BackfillProgress {
 
 // ─── Grid Generation ────────────────────────────────────────
 
-const UK_BOUNDS = { minLat: 49.9, maxLat: 58.7, minLng: -8.2, maxLng: 1.8 }
+// Southernmost mainland England ~50.05 (Lizard Point), northernmost Scotland ~58.67
+// Westernmost NI ~-8.18, easternmost England (Lowestoft) ~1.76
+export const UK_BOUNDS = { minLat: 50.05, maxLat: 58.7, minLng: -8.2, maxLng: 1.77 }
 
 const REGION_BOUNDS: Record<string, { minLat: number; maxLat: number; minLng: number; maxLng: number }> = {
   'west-midlands': { minLat: 52.2, maxLat: 52.9, minLng: -2.3, maxLng: -1.3 },
