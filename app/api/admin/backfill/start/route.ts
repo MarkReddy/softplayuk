@@ -54,17 +54,43 @@ export async function POST(request: Request) {
 
     const runId = await createRun(config)
 
-    // Fire and forget
-    executeRun(runId).catch((err) => {
-      console.error(`[v0] Backfill run ${runId} failed:`, err)
+    // Stream the execution as SSE so the Vercel function stays alive.
+    // The function runs for up to maxDuration (300s / 5 min).
+    // The dashboard polls /api/admin/backfill/runs for live progress anyway,
+    // but we must keep THIS request alive or Vercel kills executeRun().
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Send the initial runId immediately so the client can navigate
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ runId, status: 'started' })}\n\n`),
+        )
+
+        try {
+          const result = await executeRun(runId)
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ runId, status: result.status, discovered: result.discovered, inserted: result.inserted, updated: result.updated, enriched: result.enriched, failed: result.failed })}\n\n`,
+            ),
+          )
+        } catch (err) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ runId, status: 'failed', error: err instanceof Error ? err.message : String(err) })}\n\n`,
+            ),
+          )
+        } finally {
+          controller.close()
+        }
+      },
     })
 
-    return NextResponse.json({
-      runId,
-      mode,
-      region: region || city || 'Full UK',
-      status: 'started',
-      message: `Backfill run #${runId} started. Monitor at /admin/backfill/runs/${runId}`,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
     })
   } catch (err) {
     console.error('[v0] Backfill start error:', err)

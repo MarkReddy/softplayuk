@@ -75,10 +75,46 @@ export function BackfillDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, region: region || undefined, city: city || undefined, enrichDetails, dryRun: false }),
       })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Failed to start'); return }
-      setLastStartedId(data.runId)
-      refreshRuns()
+
+      // The response may be SSE (streaming) or JSON (error)
+      const contentType = res.headers.get('content-type') || ''
+
+      if (contentType.includes('text/event-stream') && res.body) {
+        // Read the first SSE message to get the runId, then detach
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let gotRunId = false
+
+        const readChunk = async () => {
+          const { done, value } = await reader.read()
+          if (done) return
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const parsed = JSON.parse(line.slice(6))
+                if (parsed.runId && !gotRunId) {
+                  gotRunId = true
+                  setLastStartedId(parsed.runId)
+                  refreshRuns()
+                }
+              } catch { /* ignore parse errors */ }
+            }
+          }
+          if (!gotRunId) await readChunk()
+        }
+        await readChunk()
+
+        // Let the stream continue in background (keeps function alive on Vercel)
+        // We don't need to read further -- the dashboard polls for progress
+      } else {
+        const data = await res.json()
+        if (!res.ok) { setError(data.error || 'Failed to start'); return }
+        setLastStartedId(data.runId)
+        refreshRuns()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error')
     } finally {
