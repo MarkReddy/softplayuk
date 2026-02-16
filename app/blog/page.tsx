@@ -47,11 +47,12 @@ function getCatSlug(cat: string) {
 }
 
 export default async function BlogPage() {
-  const [regionsRaw, categoriesRaw, citiesRaw, totalRow] = await Promise.all([
+  const [regionsRaw, categoriesRaw, citiesRaw, totalRow, publishedPosts] = await Promise.all([
     sql`SELECT county, LOWER(REPLACE(REPLACE(county, ' ', '-'), '''', '')) as slug, COUNT(*) as cnt FROM venues WHERE status = 'active' AND county IS NOT NULL AND county != '' GROUP BY county ORDER BY cnt DESC LIMIT 20`,
     sql`SELECT category, COUNT(*) as cnt FROM venues WHERE status = 'active' GROUP BY category ORDER BY cnt DESC`,
     sql`SELECT city, LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug, COUNT(*) as cnt FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != '' GROUP BY city, LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) ORDER BY cnt DESC LIMIT 20`,
     sql`SELECT COUNT(*) as cnt FROM venues WHERE status = 'active'`,
+    sql`SELECT slug, title, excerpt, city, region, word_count, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC LIMIT 12`,
   ])
 
   const regions = regionsRaw as unknown as RegionSummary[]
@@ -87,6 +88,38 @@ export default async function BlogPage() {
               <PostcodeSearch size="sm" />
             </div>
           </div>
+
+          {/* Published Articles */}
+          {publishedPosts.length > 0 && (
+            <section className="mb-10">
+              <h2 className="mb-4 font-serif text-2xl font-bold text-foreground">
+                Latest guides
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {publishedPosts.map((post) => (
+                  <Link
+                    key={post.slug as string}
+                    href={`/blog/${post.slug}`}
+                    className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-sm"
+                  >
+                    <h3 className="mb-2 font-serif text-base font-bold text-foreground transition-colors group-hover:text-primary line-clamp-2">
+                      {post.title as string}
+                    </h3>
+                    <p className="mb-3 text-sm text-muted-foreground line-clamp-2">
+                      {post.excerpt as string}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {post.city && <span>{post.city as string}</span>}
+                      <span>{Math.ceil(Number(post.word_count) / 200)} min read</span>
+                      {post.published_at && (
+                        <span>{new Date(post.published_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Browse by Category */}
           <section className="mb-10">

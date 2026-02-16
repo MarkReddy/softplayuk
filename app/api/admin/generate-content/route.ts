@@ -39,38 +39,74 @@ function getCategoryContext(category: string): string {
   }
 }
 
+// GET: Check progress stats
+export async function GET(request: Request) {
+  const authError = requireAdmin(request)
+  if (authError) return authError
+
+  const [stats] = await sql`
+    SELECT
+      COUNT(*) as total,
+      COUNT(CASE WHEN description IS NOT NULL AND description != '' THEN 1 END) as with_desc,
+      COUNT(CASE WHEN has_cafe OR has_parking OR has_party_rooms OR is_sen_friendly OR has_baby_area OR has_outdoor THEN 1 END) as with_facilities
+    FROM venues WHERE status = 'active'
+  `
+  const [reviewStats] = await sql`
+    SELECT COUNT(DISTINCT venue_id) as venues_with_reviews FROM reviews WHERE source = 'first_party'
+  `
+  return NextResponse.json({
+    total: Number(stats.total),
+    withDescription: Number(stats.with_desc),
+    withFacilities: Number(stats.with_facilities),
+    withReviews: Number(reviewStats.venues_with_reviews),
+    missingDescription: Number(stats.total) - Number(stats.with_desc),
+    missingFacilities: Number(stats.total) - Number(stats.with_facilities),
+  })
+}
+
 export async function POST(request: Request) {
   const authError = requireAdmin(request)
   if (authError) return authError
 
   let body: Record<string, unknown>
   try { body = await request.json() } catch { body = {} }
-  const batchSize = Math.min(body.batchSize || 20, 50)
-  const offset = body.offset || 0
-  const type = body.type || 'all' // 'descriptions', 'reviews', 'facilities', 'all'
+  const batchSize = Math.min(Number(body.batchSize) || 20, 50)
+  const offset = Number(body.offset) || 0
+  const type = (body.type as string) || 'all'
+  const venueId = body.venueId ? Number(body.venueId) : null
 
-  // Get venues that need content
-  const venues = await sql`
-    SELECT id, name, city, county, category, address_line1, postcode,
-           google_rating, google_review_count, description,
-           has_cafe, has_parking, has_party_rooms, is_sen_friendly,
-           has_baby_area, has_outdoor
-    FROM venues
-    WHERE status = 'active'
-    ORDER BY id ASC
-    LIMIT ${batchSize} OFFSET ${offset}
-  `
+  // If a specific venueId is provided, generate content for just that venue (synchronous)
+  let venues
+  if (venueId) {
+    venues = await sql`
+      SELECT id, name, city, county, category, address_line1, postcode,
+             google_rating, google_review_count, description,
+             has_cafe, has_parking, has_party_rooms, is_sen_friendly,
+             has_baby_area, has_outdoor
+      FROM venues WHERE id = ${venueId} AND status = 'active'
+    `
+  } else {
+    venues = await sql`
+      SELECT id, name, city, county, category, address_line1, postcode,
+             google_rating, google_review_count, description,
+             has_cafe, has_parking, has_party_rooms, is_sen_friendly,
+             has_baby_area, has_outdoor
+      FROM venues
+      WHERE status = 'active'
+      ORDER BY id ASC
+      LIMIT ${batchSize} OFFSET ${offset}
+    `
+  }
 
   if (venues.length === 0) {
-    return NextResponse.json({ done: true, processed: 0, message: 'No more venues to process' })
+    return NextResponse.json({ done: true, processed: 0, message: venueId ? 'Venue not found' : 'No more venues to process' })
   }
 
   const runId = Date.now()
-  let processed = 0
-  let errors = 0
 
-  // Return immediately, process in background
-  after(async () => {
+  async function processVenues() {
+    let processed = 0
+    let errors = 0
     for (const venue of venues) {
       try {
         const venueId = Number(venue.id)
@@ -198,7 +234,22 @@ export async function POST(request: Request) {
       }
     }
     console.log(`[v0] Content generation batch complete: ${processed} processed, ${errors} errors`)
-  })
+    return { processed, errors }
+  }
+
+  // Single venue: run synchronously and return results
+  if (venueId) {
+    const result = await processVenues()
+    return NextResponse.json({
+      runId,
+      venueId,
+      ...result,
+      message: result.errors > 0 ? 'Completed with errors' : 'Content generated successfully',
+    })
+  }
+
+  // Batch: run in background
+  after(processVenues)
 
   return NextResponse.json({
     runId,
