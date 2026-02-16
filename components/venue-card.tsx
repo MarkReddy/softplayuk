@@ -1,3 +1,4 @@
+// All images use native <img> tags - no next/image imports
 import Link from "next/link"
 import { Star, Car, Coffee, Heart, PartyPopper, MapPin, Clock, Wifi, Baby, TreePine } from "lucide-react"
 import { Badge } from "@/components/ui/badge"

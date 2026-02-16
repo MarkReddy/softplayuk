@@ -39,6 +39,7 @@ function BlogGate() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [bulkAutoPublish, setBulkAutoPublish] = useState(true)
+  const [errors, setErrors] = useState<string[]>([])
 
   const fetchPosts = useCallback(async () => {
     const res = await fetchWithAuth('/api/admin/generate-blog-posts')
@@ -54,8 +55,6 @@ function BlogGate() {
   }, [isAuthenticated, fetchPosts])
 
   if (!isAuthenticated) return <AdminLogin />
-
-  const [errors, setErrors] = useState<string[]>([])
 
   const handleGenerate = async (action: string, params: Record<string, unknown>) => {
     setLoading(true)

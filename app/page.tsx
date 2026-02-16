@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+// All images use native <img> tags - no next/image imports
 import Link from 'next/link'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
