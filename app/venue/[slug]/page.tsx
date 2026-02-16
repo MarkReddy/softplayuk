@@ -328,20 +328,25 @@ export default async function VenueDetailPage({
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-border">
-                  <div className="flex aspect-[4/3] items-center justify-center bg-secondary">
-                    <div className="text-center">
-                      <MapPin className="mx-auto mb-2 h-8 w-8 text-primary" />
-                      <p className="text-sm font-medium text-foreground">{venue.address}</p>
-                      <p className="text-xs text-muted-foreground">{venue.postcode}</p>
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${venue.lat},${venue.lng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
-                      >
-                        Open in Google Maps
-                      </a>
-                    </div>
+                  <iframe
+                    title={`Map showing ${venue.name}`}
+                    className="aspect-[4/3] w-full border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps/embed/v1/place?key=${process.env.GOOGLE_PLACES_API_KEY || ''}&q=${encodeURIComponent(venue.name + ' ' + venue.postcode)}&center=${venue.lat},${venue.lng}&zoom=15`}
+                    allowFullScreen
+                  />
+                  <div className="bg-card p-3 text-center">
+                    <p className="text-sm font-medium text-foreground">{venue.address}</p>
+                    <p className="text-xs text-muted-foreground">{venue.postcode}</p>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${venue.lat},${venue.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-block text-sm font-medium text-primary hover:underline"
+                    >
+                      Open in Google Maps
+                    </a>
                   </div>
                 </div>
 
