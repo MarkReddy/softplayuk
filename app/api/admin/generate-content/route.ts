@@ -11,6 +11,16 @@ export const maxDuration = 300
 
 const sql = neon(process.env.DATABASE_URL!)
 
+/** Wrap a promise with a timeout */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
+    ),
+  ])
+}
+
 const FIRST_NAMES = [
   'Emma', 'Olivia', 'Sophie', 'Lily', 'Jessica', 'Amelia', 'Charlotte', 'Mia',
   'James', 'Oliver', 'Jack', 'Harry', 'George', 'Noah', 'Thomas', 'William',
@@ -113,7 +123,7 @@ export async function POST(request: Request) {
 
   let body: Record<string, unknown>
   try { body = await request.json() } catch { body = {} }
-  const batchSize = Math.min(Number(body.batchSize) || 20, 50)
+  const batchSize = Math.min(Number(body.batchSize) || 5, 10) // Max 10, default 5 to avoid timeouts
   const offset = Number(body.offset) || 0
   const type = (body.type as string) || 'all'
   const venueId = body.venueId ? Number(body.venueId) : null
@@ -148,49 +158,56 @@ export async function POST(request: Request) {
   let errors = 0
   const errorDetails: string[] = []
 
-  for (const venue of venues) {
-    try {
-      const vid = Number(venue.id)
-      const categoryCtx = getCategoryContext(venue.category as string || 'soft_play')
-      const venueName = venue.name as string
-      const city = venue.city as string || 'the local area'
-      const county = venue.county as string || ''
+  // Process venues in parallel (all venues in batch at once, with per-venue timeout)
+  const PER_VENUE_TIMEOUT = 45_000 // 45s per AI call
 
-      // 1. Generate description
-      if (type === 'all' || type === 'descriptions') {
-        if (!venue.description || (venue.description as string).length < 20) {
-          try {
-            const descResult = await generateText({
-              model: groq('llama-3.3-70b-versatile'),
-              prompt: `Write a brief, informative 2-3 sentence description for "${venueName}", which is ${categoryCtx} located in ${city}${county ? `, ${county}` : ''}, UK. ` +
-                `${venue.google_rating ? `It has a ${venue.google_rating}/5 Google rating.` : ''} ` +
-                `Write in a warm, factual tone suitable for parents looking for children's activities. Do not use quotation marks around the venue name. Do not start with "Welcome to". Just describe what the venue offers.\n\n` +
-                `Return ONLY a JSON object: {"description": "your text here"}`,
-            })
-            const parsed = parseJsonFromText(descResult.text) as { description?: string } | null
-            if (parsed?.description && parsed.description.length > 20) {
-              await sql`UPDATE venues SET description = ${parsed.description} WHERE id = ${vid}`
-            }
-          } catch (e) {
-            errorDetails.push(`${venueName}: description failed - ${e instanceof Error ? e.message : String(e)}`)
+  async function processVenue(venue: Record<string, unknown>): Promise<{ ok: boolean; errors: string[] }> {
+    const venueErrors: string[] = []
+    const vid = Number(venue.id)
+    const categoryCtx = getCategoryContext(venue.category as string || 'soft_play')
+    const venueName = venue.name as string
+    const city = venue.city as string || 'the local area'
+    const county = venue.county as string || ''
+
+    // Run all content types in parallel for this venue
+    const tasks: Promise<void>[] = []
+
+    // 1. Description
+    if ((type === 'all' || type === 'descriptions') && (!venue.description || (venue.description as string).length < 20)) {
+      tasks.push((async () => {
+        try {
+          const descResult = await withTimeout(generateText({
+            model: groq('llama-3.3-70b-versatile'),
+            prompt: `Write a brief, informative 2-3 sentence description for "${venueName}", which is ${categoryCtx} located in ${city}${county ? `, ${county}` : ''}, UK. ` +
+              `${venue.google_rating ? `It has a ${venue.google_rating}/5 Google rating.` : ''} ` +
+              `Write in a warm, factual tone suitable for parents looking for children's activities. Do not use quotation marks around the venue name. Do not start with "Welcome to". Just describe what the venue offers.\n\n` +
+              `Return ONLY a JSON object: {"description": "your text here"}`,
+          }), PER_VENUE_TIMEOUT, `${venueName} description`)
+          const parsed = parseJsonFromText(descResult.text) as { description?: string } | null
+          if (parsed?.description && parsed.description.length > 20) {
+            await sql`UPDATE venues SET description = ${parsed.description} WHERE id = ${vid}`
           }
+        } catch (e) {
+          venueErrors.push(`${venueName}: description - ${e instanceof Error ? e.message : String(e)}`)
         }
-      }
+      })())
+    }
 
-      // 2. Generate facilities
-      if (type === 'all' || type === 'facilities') {
-        const hasFacilities = venue.has_cafe || venue.has_parking || venue.has_party_rooms ||
-                              venue.is_sen_friendly || venue.has_baby_area || venue.has_outdoor
-        if (!hasFacilities) {
+    // 2. Facilities
+    if (type === 'all' || type === 'facilities') {
+      const hasFacilities = venue.has_cafe || venue.has_parking || venue.has_party_rooms ||
+                            venue.is_sen_friendly || venue.has_baby_area || venue.has_outdoor
+      if (!hasFacilities) {
+        tasks.push((async () => {
           try {
-            const facResult = await generateText({
+            const facResult = await withTimeout(generateText({
               model: groq('llama-3.3-70b-versatile'),
               prompt: `For "${venueName}", ${categoryCtx} in ${city}, UK, determine which facilities it likely has. ` +
                 `Be realistic based on the type of venue. For public playgrounds: typically no cafe, free parking nearby, no party rooms, may have baby area. ` +
                 `For soft play centres: typically cafe, parking, party rooms, baby area.\n\n` +
                 `Return ONLY a JSON object with boolean values:\n` +
                 `{"has_cafe": true/false, "has_parking": true/false, "has_party_rooms": true/false, "has_baby_area": true/false, "has_outdoor": true/false, "is_sen_friendly": true/false}`,
-            })
+            }), PER_VENUE_TIMEOUT, `${venueName} facilities`)
             const fac = parseJsonFromText(facResult.text) as {
               has_cafe?: boolean; has_parking?: boolean; has_party_rooms?: boolean;
               has_baby_area?: boolean; has_outdoor?: boolean; is_sen_friendly?: boolean
@@ -206,66 +223,76 @@ export async function POST(request: Request) {
               WHERE id = ${vid}`
             }
           } catch (e) {
-            errorDetails.push(`${venueName}: facilities failed - ${e instanceof Error ? e.message : String(e)}`)
+            venueErrors.push(`${venueName}: facilities - ${e instanceof Error ? e.message : String(e)}`)
           }
-        }
+        })())
       }
+    }
 
-      // 3. Generate reviews
-      if (type === 'all' || type === 'reviews') {
-        const existingReviews = await sql`SELECT COUNT(*) as cnt FROM reviews WHERE venue_id = ${vid} AND source = 'first_party'`
-        const existingCount = Number(existingReviews[0]?.cnt) || 0
+    // 3. Reviews
+    if (type === 'all' || type === 'reviews') {
+      tasks.push((async () => {
+        try {
+          const existingReviews = await sql`SELECT COUNT(*) as cnt FROM reviews WHERE venue_id = ${vid} AND source = 'first_party'`
+          const existingCount = Number(existingReviews[0]?.cnt) || 0
+          if (existingCount >= 3) return
 
-        if (existingCount < 3) {
-          try {
-            const reviewCount = 3 + Math.floor(Math.random() * 5) - existingCount
-            if (reviewCount > 0) {
-              const reviewResult = await generateText({
-                model: groq('llama-3.3-70b-versatile'),
-                prompt: `Write ${reviewCount} realistic parent reviews for "${venueName}", ${categoryCtx} in ${city}, UK. ` +
-                  `${venue.google_rating ? `The venue has a ${venue.google_rating}/5 Google rating.` : ''} ` +
-                  `Reviews should be from British parents who visited with their children. ` +
-                  `Mix of very positive (4-5 stars) and a couple moderate (3-4 stars). Include specific details. ` +
-                  `Each review: 1-3 sentences in natural British English ("brilliant", "lovely", "kids absolutely loved it"). ` +
-                  `Do NOT mention the reviewer's name.\n\n` +
-                  `Return ONLY a JSON object:\n` +
-                  `{"reviews": [{"rating": 5, "comment": "...", "cleanliness_rating": 4, "value_rating": 5}, ...]}`,
-              })
-              const parsed = parseJsonFromText(reviewResult.text) as {
-                reviews?: Array<{ rating: number; comment: string; cleanliness_rating: number; value_rating: number }>
-              } | null
-              if (parsed?.reviews && parsed.reviews.length > 0) {
-                for (const review of parsed.reviews) {
-                  const author = randomAuthor()
-                  const daysAgo = Math.floor(Math.random() * 180) + 7
-                  const createdAt = new Date(Date.now() - daysAgo * 86400000).toISOString()
-                  await sql`
-                    INSERT INTO reviews (venue_id, source, author_name, rating, cleanliness_rating, value_rating, body, created_at)
-                    VALUES (${vid}, 'first_party', ${author}, ${review.rating}, ${review.cleanliness_rating}, ${review.value_rating}, ${review.comment}, ${createdAt})
-                  `
-                }
-                const avgRows = await sql`
-                  SELECT AVG(rating) as avg_rating, COUNT(*) as cnt
-                  FROM reviews WHERE venue_id = ${vid} AND source = 'first_party'
-                `
-                if (avgRows.length > 0) {
-                  await sql`UPDATE venues SET
-                    first_party_rating = ${Number(avgRows[0].avg_rating)},
-                    first_party_review_count = ${Number(avgRows[0].cnt)}
-                  WHERE id = ${vid}`
-                }
-              }
+          const reviewCount = 3 + Math.floor(Math.random() * 5) - existingCount
+          if (reviewCount <= 0) return
+
+          const reviewResult = await withTimeout(generateText({
+            model: groq('llama-3.3-70b-versatile'),
+            prompt: `Write ${reviewCount} realistic parent reviews for "${venueName}", ${categoryCtx} in ${city}, UK. ` +
+              `${venue.google_rating ? `The venue has a ${venue.google_rating}/5 Google rating.` : ''} ` +
+              `Reviews should be from British parents who visited with their children. ` +
+              `Mix of very positive (4-5 stars) and a couple moderate (3-4 stars). Include specific details. ` +
+              `Each review: 1-3 sentences in natural British English ("brilliant", "lovely", "kids absolutely loved it"). ` +
+              `Do NOT mention the reviewer's name.\n\n` +
+              `Return ONLY a JSON object:\n` +
+              `{"reviews": [{"rating": 5, "comment": "...", "cleanliness_rating": 4, "value_rating": 5}, ...]}`,
+          }), PER_VENUE_TIMEOUT, `${venueName} reviews`)
+          const parsed = parseJsonFromText(reviewResult.text) as {
+            reviews?: Array<{ rating: number; comment: string; cleanliness_rating: number; value_rating: number }>
+          } | null
+          if (parsed?.reviews && parsed.reviews.length > 0) {
+            for (const review of parsed.reviews) {
+              const author = randomAuthor()
+              const daysAgo = Math.floor(Math.random() * 180) + 7
+              const createdAt = new Date(Date.now() - daysAgo * 86400000).toISOString()
+              await sql`
+                INSERT INTO reviews (venue_id, source, author_name, rating, cleanliness_rating, value_rating, body, created_at)
+                VALUES (${vid}, 'first_party', ${author}, ${review.rating}, ${review.cleanliness_rating}, ${review.value_rating}, ${review.comment}, ${createdAt})
+              `
             }
-          } catch (e) {
-            errorDetails.push(`${venueName}: reviews failed - ${e instanceof Error ? e.message : String(e)}`)
+            const avgRows = await sql`
+              SELECT AVG(rating) as avg_rating, COUNT(*) as cnt
+              FROM reviews WHERE venue_id = ${vid} AND source = 'first_party'
+            `
+            if (avgRows.length > 0) {
+              await sql`UPDATE venues SET
+                first_party_rating = ${Number(avgRows[0].avg_rating)},
+                first_party_review_count = ${Number(avgRows[0].cnt)}
+              WHERE id = ${vid}`
+            }
           }
+        } catch (e) {
+          venueErrors.push(`${venueName}: reviews - ${e instanceof Error ? e.message : String(e)}`)
         }
-      }
+      })())
+    }
 
-      processed++
-    } catch (err) {
-      errors++
-      errorDetails.push(`${venue.name}: ${err instanceof Error ? err.message : String(err)}`)
+    await Promise.all(tasks)
+    return { ok: venueErrors.length === 0, errors: venueErrors }
+  }
+
+  // Process all venues in the batch in parallel (max 5 concurrent)
+  const results = await Promise.all(venues.map(processVenue))
+
+  for (const r of results) {
+    if (r.ok) processed++
+    else {
+      if (r.errors.length > 0) { processed++; errorDetails.push(...r.errors) }
+      else errors++
     }
   }
 
