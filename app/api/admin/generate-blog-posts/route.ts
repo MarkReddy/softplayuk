@@ -21,8 +21,9 @@ export const maxDuration = 300
 
 const sql = neon(process.env.DATABASE_URL!)
 
-// Minimum word counts by content type
-const MIN_WORDS = { city: 1100, area: 800, intent: 900, region: 800 } as const
+// Target word counts (auto-expansion triggers below these)
+// Hard rejection only below 250 words -- anything above is valid SEO content
+const MIN_WORDS = { city: 800, area: 400, intent: 400, region: 400 } as const
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -32,16 +33,81 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function parseJsonFromText(text: string): Record<string, unknown> | null {
+/** Extract a delimited field from AI output: <TAG>value</TAG> */
+function extractTag(text: string, tag: string): string {
+  const openTag = `<${tag}>`
+  const closeTag = `</${tag}>`
+  const start = text.indexOf(openTag)
+  const end = text.indexOf(closeTag)
+  if (start === -1 || end === -1 || end <= start) return ''
+  return text.slice(start + openTag.length, end).trim()
+}
+
+/** Parse FAQ block: "Q: ...\nA: ..." pairs */
+function parseFaqs(faqText: string): Array<{ question: string; answer: string }> {
+  const faqs: Array<{ question: string; answer: string }> = []
+  const pairs = faqText.split(/\n\s*Q:\s*/i).filter(Boolean)
+  for (const pair of pairs) {
+    const cleaned = pair.startsWith('Q:') ? pair.slice(2).trim() : pair.trim()
+    const aIndex = cleaned.search(/\nA:\s*/i)
+    if (aIndex === -1) continue
+    const question = cleaned.slice(0, aIndex).trim().replace(/^\d+\.\s*/, '')
+    const answer = cleaned.slice(aIndex).replace(/^A:\s*/i, '').trim()
+    if (question && answer) faqs.push({ question, answer })
+  }
+  return faqs
+}
+
+/** Parse AI response -- supports delimited format (primary) and JSON (fallback) */
+function parseAIResponse(text: string): Record<string, unknown> | null {
+  // PRIMARY: Delimited tag format
+  const content = extractTag(text, 'CONTENT')
+  if (content && content.length > 100) {
+    return {
+      title: extractTag(text, 'TITLE'),
+      content,
+      meta_title: extractTag(text, 'META_TITLE'),
+      meta_description: extractTag(text, 'META_DESCRIPTION'),
+      excerpt: extractTag(text, 'EXCERPT'),
+      faqs: parseFaqs(extractTag(text, 'FAQS')),
+    }
+  }
+
+  // FALLBACK 1: Direct JSON parse
   try { return JSON.parse(text) } catch { /* continue */ }
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (match) {
-    try { return JSON.parse(match[1].trim()) } catch { /* continue */ }
+
+  // FALLBACK 2: JSON in markdown code block
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) {
+    try { return JSON.parse(codeBlockMatch[1].trim()) } catch { /* continue */ }
   }
-  const braceMatch = text.match(/\{[\s\S]*\}/)
-  if (braceMatch) {
-    try { return JSON.parse(braceMatch[0]) } catch { /* continue */ }
+
+  // FALLBACK 3: Extract outermost braces and fix newlines
+  const braceStart = text.indexOf('{')
+  const braceEnd = text.lastIndexOf('}')
+  if (braceStart !== -1 && braceEnd > braceStart) {
+    const candidate = text.slice(braceStart, braceEnd + 1)
+    try { return JSON.parse(candidate) } catch { /* continue */ }
+
+    // Fix literal newlines inside JSON strings
+    try {
+      let fixed = ''
+      let inStr = false
+      let esc = false
+      for (let i = 0; i < candidate.length; i++) {
+        const ch = candidate[i]
+        if (esc) { fixed += ch; esc = false; continue }
+        if (ch === '\\') { fixed += ch; esc = true; continue }
+        if (ch === '"') { inStr = !inStr; fixed += ch; continue }
+        if (inStr && ch === '\n') { fixed += '\\n'; continue }
+        if (inStr && ch === '\r') { continue }
+        if (inStr && ch === '\t') { fixed += '\\t'; continue }
+        fixed += ch
+      }
+      return JSON.parse(fixed)
+    } catch { /* continue */ }
   }
+
   return null
 }
 
@@ -162,18 +228,27 @@ async function generateAndSavePost(
     prompt,
   })
 
-  let post = parseJsonFromText(result.text)
+  let post = parseAIResponse(result.text)
   if (!post || !post.content) {
-    throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}`)
+    console.error(`[v0] Unparseable AI response for ${city}. First 500 chars:`, result.text?.substring(0, 500))
+    throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}. Preview: ${result.text?.substring(0, 150)}`)
   }
 
   let content = post.content as string
   let wordCount = content.split(/\s+/).length
 
   // Auto-regeneration: if under minimum, expand with a second pass
-  if (wordCount < minWords && contentType === 'city') {
-    console.log(`[v0] City guide for ${city} only ${wordCount} words (min ${minWords}), auto-expanding...`)
-    const expansionPrompt = buildCityGuideExpansionPrompt(city, content, wordCount)
+  if (wordCount < minWords) {
+    const label = contentType === 'city' ? city : area || intent || city
+    console.log(`[v0] ${contentType} guide for ${label} only ${wordCount} words (min ${minWords}), auto-expanding...`)
+    const expansionPrompt = contentType === 'city'
+      ? buildCityGuideExpansionPrompt(city, content, wordCount)
+      : `You previously wrote the following ${contentType} guide about "${label}" but it was only ${wordCount} words. ` +
+        `Please rewrite it to be at least ${minWords} words. Add more detail, expand each section, include more specific tips and recommendations.\n\n` +
+        `Respond using EXACTLY this delimited format:\n` +
+        `<TITLE>title</TITLE>\n<META_TITLE>seo title</META_TITLE>\n<META_DESCRIPTION>meta desc</META_DESCRIPTION>\n<EXCERPT>excerpt</EXCERPT>\n` +
+        `<CONTENT>\nfull markdown article\n</CONTENT>\n<FAQS>\nQ: question?\nA: answer.\n</FAQS>\n\n` +
+        `Original content:\n${content}`
     await delay(2000)
 
     result = await generateText({
@@ -181,7 +256,7 @@ async function generateAndSavePost(
       prompt: expansionPrompt,
     })
 
-    const expandedPost = parseJsonFromText(result.text)
+    const expandedPost = parseAIResponse(result.text)
     if (expandedPost?.content) {
       const expandedContent = expandedPost.content as string
       const expandedWordCount = expandedContent.split(/\s+/).length
@@ -194,9 +269,9 @@ async function generateAndSavePost(
     }
   }
 
-  // Final validation -- reject if still too short (but lower threshold for expanded)
-  if (wordCount < Math.floor(minWords * 0.7)) {
-    throw new Error(`Content too short: ${wordCount} words (minimum ~${minWords})`)
+  // Final validation -- only reject truly empty/broken responses (under 250 words)
+  if (wordCount < 250) {
+    throw new Error(`Content too short: ${wordCount} words (minimum 250)`)
   }
 
   const faqs = (post.faqs as Array<{ question: string; answer: string }>) || []
@@ -446,7 +521,7 @@ Do NOT include public parks, playgrounds, or free outdoor play areas in the main
 Respond with ONLY valid JSON: {"title":"...","content":"... markdown ...","meta_title":"... (max 60 chars, include 2026)","meta_description":"... (155-160 chars, mention indoor soft play centres)","og_title":"...","og_description":"...","excerpt":"...","faqs":[{"question":"...","answer":"..."}]}`
 
       const result = await generateText({ model: groq('llama-3.3-70b-versatile'), prompt })
-      const post = parseJsonFromText(result.text)
+      const post = parseAIResponse(result.text)
       if (!post || !post.content) throw new Error('AI returned unparseable content')
 
       const content = post.content as string
