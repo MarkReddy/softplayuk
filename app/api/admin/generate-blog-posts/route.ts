@@ -33,30 +33,69 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function parseJsonFromText(text: string): Record<string, unknown> | null {
-  // 1. Direct parse
+/** Extract a delimited field from AI output: <TAG>value</TAG> */
+function extractTag(text: string, tag: string): string {
+  const openTag = `<${tag}>`
+  const closeTag = `</${tag}>`
+  const start = text.indexOf(openTag)
+  const end = text.indexOf(closeTag)
+  if (start === -1 || end === -1 || end <= start) return ''
+  return text.slice(start + openTag.length, end).trim()
+}
+
+/** Parse FAQ block: "Q: ...\nA: ..." pairs */
+function parseFaqs(faqText: string): Array<{ question: string; answer: string }> {
+  const faqs: Array<{ question: string; answer: string }> = []
+  const pairs = faqText.split(/\n\s*Q:\s*/i).filter(Boolean)
+  for (const pair of pairs) {
+    const cleaned = pair.startsWith('Q:') ? pair.slice(2).trim() : pair.trim()
+    const aIndex = cleaned.search(/\nA:\s*/i)
+    if (aIndex === -1) continue
+    const question = cleaned.slice(0, aIndex).trim().replace(/^\d+\.\s*/, '')
+    const answer = cleaned.slice(aIndex).replace(/^A:\s*/i, '').trim()
+    if (question && answer) faqs.push({ question, answer })
+  }
+  return faqs
+}
+
+/** Parse AI response -- supports delimited format (primary) and JSON (fallback) */
+function parseAIResponse(text: string): Record<string, unknown> | null {
+  // PRIMARY: Delimited tag format
+  const content = extractTag(text, 'CONTENT')
+  if (content && content.length > 100) {
+    return {
+      title: extractTag(text, 'TITLE'),
+      content,
+      meta_title: extractTag(text, 'META_TITLE'),
+      meta_description: extractTag(text, 'META_DESCRIPTION'),
+      excerpt: extractTag(text, 'EXCERPT'),
+      faqs: parseFaqs(extractTag(text, 'FAQS')),
+    }
+  }
+
+  // FALLBACK 1: Direct JSON parse
   try { return JSON.parse(text) } catch { /* continue */ }
 
-  // 2. Extract from markdown code block
+  // FALLBACK 2: JSON in markdown code block
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch) {
     try { return JSON.parse(codeBlockMatch[1].trim()) } catch { /* continue */ }
   }
 
-  // 3. Extract outermost braces
+  // FALLBACK 3: Extract outermost braces and fix newlines
   const braceStart = text.indexOf('{')
   const braceEnd = text.lastIndexOf('}')
   if (braceStart !== -1 && braceEnd > braceStart) {
-    const jsonCandidate = text.slice(braceStart, braceEnd + 1)
-    try { return JSON.parse(jsonCandidate) } catch { /* continue */ }
+    const candidate = text.slice(braceStart, braceEnd + 1)
+    try { return JSON.parse(candidate) } catch { /* continue */ }
 
-    // 3.5. Character-by-character string fixer: escape literal newlines inside JSON strings
+    // Fix literal newlines inside JSON strings
     try {
       let fixed = ''
       let inStr = false
       let esc = false
-      for (let i = 0; i < jsonCandidate.length; i++) {
-        const ch = jsonCandidate[i]
+      for (let i = 0; i < candidate.length; i++) {
+        const ch = candidate[i]
         if (esc) { fixed += ch; esc = false; continue }
         if (ch === '\\') { fixed += ch; esc = true; continue }
         if (ch === '"') { inStr = !inStr; fixed += ch; continue }
@@ -68,80 +107,6 @@ function parseJsonFromText(text: string): Record<string, unknown> | null {
       return JSON.parse(fixed)
     } catch { /* continue */ }
   }
-
-  // 4. Field-by-field extraction -- most reliable for LLM output with unescaped content
-  // This handles the common case where the JSON has literal newlines inside string values
-  try {
-    const extractField = (key: string, src: string): string => {
-      // Find "key": " then capture everything until we find a closing pattern
-      // Use a greedy approach: find the key, then scan forward for the value boundaries
-      const keyPattern = new RegExp(`"${key}"\\s*:\\s*"`)
-      const keyMatch = keyPattern.exec(src)
-      if (!keyMatch) return ''
-
-      const valueStart = keyMatch.index + keyMatch[0].length
-      // Scan for the end of the string value -- find unescaped quote followed by , or } or \n"
-      let depth = 0
-      let i = valueStart
-      while (i < src.length) {
-        if (src[i] === '\\') { i += 2; continue } // skip escaped chars
-        if (src[i] === '"') {
-          // Check what follows: skip whitespace then check for , or } or next key
-          let j = i + 1
-          while (j < src.length && (src[j] === ' ' || src[j] === '\r' || src[j] === '\t')) j++
-          if (src[j] === ',' || src[j] === '}' || src[j] === '\n') {
-            return src.slice(valueStart, i)
-          }
-        }
-        i++
-      }
-      // Fallback: take everything to next unescaped quote
-      const endQuote = src.indexOf('"', valueStart)
-      return endQuote > valueStart ? src.slice(valueStart, endQuote) : ''
-    }
-
-    const raw = text.slice(braceStart !== -1 ? braceStart : 0, braceEnd !== -1 ? braceEnd + 1 : text.length)
-
-    // For content field, use a special approach: find "content": " and grab until the next top-level key
-    const contentKeyMatch = raw.match(/"content"\s*:\s*"/)
-    let content = ''
-    if (contentKeyMatch && contentKeyMatch.index !== undefined) {
-      const valStart = contentKeyMatch.index + contentKeyMatch[0].length
-      // Find the next top-level key like "excerpt", "meta_title", "faqs" etc.
-      const nextKeyPattern = /"\s*,\s*\n?\s*"(excerpt|meta_title|meta_description|faqs|title)"\s*:/g
-      nextKeyPattern.lastIndex = valStart
-      const nextKeyMatch = nextKeyPattern.exec(raw)
-      if (nextKeyMatch && nextKeyMatch.index !== undefined) {
-        content = raw.slice(valStart, nextKeyMatch.index)
-      } else {
-        // Take until last }
-        content = raw.slice(valStart, raw.lastIndexOf('"'))
-      }
-    }
-
-    const title = extractField('title', raw)
-    const excerpt = extractField('excerpt', raw)
-    const meta_title = extractField('meta_title', raw)
-    const meta_description = extractField('meta_description', raw)
-
-    if (content && content.length > 100) {
-      // Try to extract faqs array
-      let faqs: Array<{ question: string; answer: string }> = []
-      const faqMatch = raw.match(/"faqs"\s*:\s*(\[[\s\S]*?\])\s*[,}]?\s*$/)
-      if (faqMatch) {
-        try { faqs = JSON.parse(faqMatch[1]) } catch { /* skip faqs */ }
-      }
-
-      // Clean up content: unescape \\n to real newlines for markdown
-      const cleanContent = content
-        .replace(/\\n/g, '\n')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\')
-        .trim()
-
-      return { title, content: cleanContent, excerpt, meta_title, meta_description, faqs }
-    }
-  } catch { /* continue */ }
 
   return null
 }
@@ -263,7 +228,7 @@ async function generateAndSavePost(
     prompt,
   })
 
-  let post = parseJsonFromText(result.text)
+  let post = parseAIResponse(result.text)
   if (!post || !post.content) {
     console.error(`[v0] Unparseable AI response for ${city}. First 500 chars:`, result.text?.substring(0, 500))
     throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}. Preview: ${result.text?.substring(0, 150)}`)
@@ -279,9 +244,11 @@ async function generateAndSavePost(
     const expansionPrompt = contentType === 'city'
       ? buildCityGuideExpansionPrompt(city, content, wordCount)
       : `You previously wrote the following ${contentType} guide about "${label}" but it was only ${wordCount} words. ` +
-        `Please rewrite it to be at least ${minWords} words. Add more detail, expand each section, include more specific tips and recommendations. ` +
-        `Return ONLY valid JSON with keys: title, content (markdown string), excerpt, meta_title, meta_description, faqs (array of {question, answer}).` +
-        `\n\nOriginal content:\n${content}`
+        `Please rewrite it to be at least ${minWords} words. Add more detail, expand each section, include more specific tips and recommendations.\n\n` +
+        `Respond using EXACTLY this delimited format:\n` +
+        `<TITLE>title</TITLE>\n<META_TITLE>seo title</META_TITLE>\n<META_DESCRIPTION>meta desc</META_DESCRIPTION>\n<EXCERPT>excerpt</EXCERPT>\n` +
+        `<CONTENT>\nfull markdown article\n</CONTENT>\n<FAQS>\nQ: question?\nA: answer.\n</FAQS>\n\n` +
+        `Original content:\n${content}`
     await delay(2000)
 
     result = await generateText({
@@ -289,7 +256,7 @@ async function generateAndSavePost(
       prompt: expansionPrompt,
     })
 
-    const expandedPost = parseJsonFromText(result.text)
+    const expandedPost = parseAIResponse(result.text)
     if (expandedPost?.content) {
       const expandedContent = expandedPost.content as string
       const expandedWordCount = expandedContent.split(/\s+/).length
@@ -554,7 +521,7 @@ Do NOT include public parks, playgrounds, or free outdoor play areas in the main
 Respond with ONLY valid JSON: {"title":"...","content":"... markdown ...","meta_title":"... (max 60 chars, include 2026)","meta_description":"... (155-160 chars, mention indoor soft play centres)","og_title":"...","og_description":"...","excerpt":"...","faqs":[{"question":"...","answer":"..."}]}`
 
       const result = await generateText({ model: groq('llama-3.3-70b-versatile'), prompt })
-      const post = parseJsonFromText(result.text)
+      const post = parseAIResponse(result.text)
       if (!post || !post.content) throw new Error('AI returned unparseable content')
 
       const content = post.content as string

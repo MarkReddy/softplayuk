@@ -93,18 +93,24 @@ STRICT QUALITY RULES:
 - IMPORTANT: All venues listed are PRIVATE, PAID indoor play centres (not public parks or free playgrounds). Do not describe them as parks or playgrounds.
 `
 
-const JSON_FORMAT = `
-You MUST respond with ONLY a valid JSON object (no markdown code blocks, no extra text) with these exact fields:
-{
-  "title": "the H1 title",
-  "content": "the full article body in markdown (do NOT include the H1 title at the top -- it is rendered separately)",
-  "meta_title": "SEO title tag (max 60 chars, include year 2026)",
-  "meta_description": "meta description (155-160 chars, include primary keyword + CTA, mention indoor soft play centres)",
-  "og_title": "Open Graph title",
-  "og_description": "Open Graph description",
-  "excerpt": "short excerpt for listings (max 200 chars)",
-  "faqs": [{"question": "...", "answer": "..."}]
-}
+const OUTPUT_FORMAT = `
+You MUST respond using EXACTLY this delimited format. Each section starts with the tag on its own line and ends with the closing tag on its own line.
+Do NOT wrap in code blocks or add any text outside the tags.
+
+<TITLE>the H1 title</TITLE>
+<META_TITLE>SEO title tag (max 60 chars, include year 2026)</META_TITLE>
+<META_DESCRIPTION>meta description (155-160 chars, include primary keyword + CTA, mention indoor soft play centres)</META_DESCRIPTION>
+<EXCERPT>short excerpt for listings (max 200 chars)</EXCERPT>
+<CONTENT>
+the full article body in markdown (do NOT include the H1 title at the top -- it is rendered separately)
+</CONTENT>
+<FAQS>
+Q: First question here?
+A: Answer here (40-70 words).
+
+Q: Second question here?
+A: Answer here (40-70 words).
+</FAQS>
 `
 
 const EXPANSION_INSTRUCTION = `
@@ -213,7 +219,7 @@ These are indoor play centres, NOT public parks or playgrounds.
 Do NOT mix in free outdoor playgrounds or public parks.
 
 ${QUALITY_RULES}
-${JSON_FORMAT}`
+${OUTPUT_FORMAT}`
 }
 
 export function buildCityGuideExpansionPrompt(
@@ -236,7 +242,7 @@ ${originalContent}
 
 ${EXPANSION_INSTRUCTION}
 ${QUALITY_RULES}
-${JSON_FORMAT}`
+${OUTPUT_FORMAT}`
 }
 
 export function buildAreaGuidePrompt(
@@ -286,7 +292,7 @@ VENUE DATA (all private paid venues):
 ${venueList}
 
 ${QUALITY_RULES}
-${JSON_FORMAT}`
+${OUTPUT_FORMAT}`
 }
 
 export function buildIntentPagePrompt(
@@ -345,5 +351,5 @@ VENUE DATA (all private paid venues):
 ${venueList}
 
 ${QUALITY_RULES}
-${JSON_FORMAT}`
+${OUTPUT_FORMAT}`
 }
