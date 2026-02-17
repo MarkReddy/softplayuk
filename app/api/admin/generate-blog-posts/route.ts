@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
+import { createGroq } from '@ai-sdk/groq'
 import { neon } from '@neondatabase/serverless'
 import { requireAdmin } from '@/lib/admin-auth'
+
+const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -239,7 +242,7 @@ You MUST respond with ONLY a valid JSON object (no markdown code blocks, no extr
   let result
   try {
     result = await generateText({
-      model: 'openai/gpt-4o-mini',
+      model: groq('llama-3.3-70b-versatile'),
       prompt,
     })
     console.log(`[v0] generateText completed for ${city}. Text length: ${result.text?.length || 0}`)
@@ -317,7 +320,7 @@ You MUST respond with ONLY a valid JSON object (no markdown code blocks, no extr
   let result
   try {
     result = await generateText({
-      model: 'openai/gpt-4o-mini',
+      model: groq('llama-3.3-70b-versatile'),
       prompt,
     })
     console.log(`[v0] generateText completed for ${region}. Text length: ${result.text?.length || 0}`)
