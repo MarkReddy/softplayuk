@@ -1,33 +1,38 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import Script from 'next/script'
 import { hasAnalyticsConsent } from '@/lib/consent'
 
 /**
- * Conditional Analytics Loader
+ * Google Analytics Loader
  *
- * This component ONLY loads Google Analytics (or any future analytics tool)
- * AFTER the user has given explicit consent via the cookie banner.
- *
- * If consent is not given or is revoked, no analytics scripts are loaded.
- *
- * Usage: Add <AnalyticsLoader /> to the root layout.
- * Set NEXT_PUBLIC_GA_ID env var to enable Google Analytics.
+ * The gtag script loads on EVERY page so Google can detect the tag.
+ * Consent Mode v2 is used: analytics starts DENIED by default,
+ * then is GRANTED once the user accepts cookies via the banner.
+ * This is GDPR-compliant and allows Google to verify the tag.
  */
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID
 
 export function AnalyticsLoader() {
-  const [consentGiven, setConsentGiven] = useState(false)
-
   useEffect(() => {
-    // Check on mount
-    setConsentGiven(hasAnalyticsConsent())
+    if (!GA_ID) return
 
-    // Re-check when consent changes
+    // Grant consent if user already accepted
+    if (hasAnalyticsConsent()) {
+      window.gtag?.('consent', 'update', {
+        analytics_storage: 'granted',
+      })
+    }
+
+    // Listen for future consent changes
     const handleConsentUpdate = () => {
-      setConsentGiven(hasAnalyticsConsent())
+      if (hasAnalyticsConsent()) {
+        window.gtag?.('consent', 'update', {
+          analytics_storage: 'granted',
+        })
+      }
     }
 
     window.addEventListener('consent-updated', handleConsentUpdate)
@@ -35,11 +40,7 @@ export function AnalyticsLoader() {
       window.removeEventListener('consent-updated', handleConsentUpdate)
   }, [])
 
-  // No GA ID configured -- render nothing
   if (!GA_ID) return null
-
-  // Consent not given -- render nothing (no scripts fire)
-  if (!consentGiven) return null
 
   return (
     <>
@@ -51,6 +52,14 @@ export function AnalyticsLoader() {
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
+
+          gtag('consent', 'default', {
+            analytics_storage: 'denied',
+            ad_storage: 'denied',
+            ad_user_data: 'denied',
+            ad_personalization: 'denied',
+          });
+
           gtag('js', new Date());
           gtag('config', '${GA_ID}', {
             anonymize_ip: true,
