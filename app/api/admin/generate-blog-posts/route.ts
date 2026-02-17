@@ -5,9 +5,11 @@ import { neon } from '@neondatabase/serverless'
 import { requireAdmin } from '@/lib/admin-auth'
 import {
   buildCityGuidePrompt,
+  buildCityGuideExpansionPrompt,
   buildAreaGuidePrompt,
   buildIntentPagePrompt,
   INTENT_TYPES,
+  SOFT_PLAY_CATEGORIES,
   type IntentType,
   type VenueData,
 } from '@/lib/blog-prompts'
@@ -18,6 +20,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 const sql = neon(process.env.DATABASE_URL!)
+
+// Minimum word counts by content type
+const MIN_WORDS = { city: 1100, area: 800, intent: 900, region: 800 } as const
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -40,13 +45,17 @@ function parseJsonFromText(text: string): Record<string, unknown> | null {
   return null
 }
 
+// ─── Venue filtering: only paid indoor venues, exclude playgrounds/parks ───
+const CATEGORY_FILTER = SOFT_PLAY_CATEGORIES.map(c => `'${c}'`).join(', ')
+
 async function fetchVenuesForCity(city: string, limit = 10): Promise<VenueData[]> {
   const rows = await sql`
     SELECT name, slug, category, google_rating, description, city, county,
            has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
-           price_range, age_range
+           has_outdoor, price_range, age_range
     FROM venues
     WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+      AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
     ORDER BY google_rating DESC NULLS LAST
     LIMIT ${limit}
   `
@@ -54,13 +63,13 @@ async function fetchVenuesForCity(city: string, limit = 10): Promise<VenueData[]
 }
 
 async function fetchVenuesForArea(city: string, area: string, limit = 8): Promise<VenueData[]> {
-  // Area may map to county or a neighbourhood within the city
   const rows = await sql`
     SELECT name, slug, category, google_rating, description, city, county,
            has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
-           price_range, age_range
+           has_outdoor, price_range, age_range
     FROM venues
     WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+      AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
     ORDER BY google_rating DESC NULLS LAST
     LIMIT ${limit}
   `
@@ -68,53 +77,27 @@ async function fetchVenuesForArea(city: string, area: string, limit = 8): Promis
 }
 
 async function fetchVenuesForIntent(city: string, intent: IntentType, limit = 8): Promise<VenueData[]> {
-  // Filter by relevant features depending on intent
-  let rows
+  let orderClause = 'google_rating DESC NULLS LAST'
   switch (intent) {
-    case 'birthday-parties':
-      rows = await sql`
-        SELECT name, slug, category, google_rating, description, city, county,
-               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
-               price_range, age_range
-        FROM venues
-        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
-        ORDER BY has_party_rooms DESC, google_rating DESC NULLS LAST
-        LIMIT ${limit}
-      `
-      break
-    case 'toddler-soft-play':
-      rows = await sql`
-        SELECT name, slug, category, google_rating, description, city, county,
-               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
-               price_range, age_range
-        FROM venues
-        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
-        ORDER BY has_baby_area DESC, google_rating DESC NULLS LAST
-        LIMIT ${limit}
-      `
-      break
-    case 'sen-friendly':
-      rows = await sql`
-        SELECT name, slug, category, google_rating, description, city, county,
-               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
-               price_range, age_range
-        FROM venues
-        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
-        ORDER BY is_sen_friendly DESC, google_rating DESC NULLS LAST
-        LIMIT ${limit}
-      `
-      break
-    default:
-      rows = await sql`
-        SELECT name, slug, category, google_rating, description, city, county,
-               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
-               price_range, age_range
-        FROM venues
-        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
-        ORDER BY google_rating DESC NULLS LAST
-        LIMIT ${limit}
-      `
+    case 'birthday-parties': orderClause = 'has_party_rooms DESC, google_rating DESC NULLS LAST'; break
+    case 'toddler-soft-play': orderClause = 'has_baby_area DESC, google_rating DESC NULLS LAST'; break
+    case 'sen-friendly': orderClause = 'is_sen_friendly DESC, google_rating DESC NULLS LAST'; break
+    default: break
   }
+  // Must use raw SQL for dynamic ORDER BY
+  const rows = await sql`
+    SELECT name, slug, category, google_rating, description, city, county,
+           has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+           has_outdoor, price_range, age_range
+    FROM venues
+    WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+      AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
+    ORDER BY ${intent === 'birthday-parties' ? sql`has_party_rooms DESC, google_rating DESC NULLS LAST`
+      : intent === 'toddler-soft-play' ? sql`has_baby_area DESC, google_rating DESC NULLS LAST`
+      : intent === 'sen-friendly' ? sql`is_sen_friendly DESC, google_rating DESC NULLS LAST`
+      : sql`google_rating DESC NULLS LAST`}
+    LIMIT ${limit}
+  `
   return rows as unknown as VenueData[]
 }
 
@@ -123,6 +106,7 @@ async function getNearbyCities(city: string, limit = 3): Promise<string[]> {
     SELECT city, COUNT(*) as cnt
     FROM venues
     WHERE status = 'active' AND LOWER(city) != LOWER(${city}) AND city IS NOT NULL AND city != ''
+      AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
     GROUP BY city
     ORDER BY cnt DESC
     LIMIT ${limit}
@@ -135,6 +119,7 @@ async function getAreasForCity(city: string): Promise<string[]> {
     SELECT DISTINCT county
     FROM venues
     WHERE status = 'active' AND LOWER(city) = LOWER(${city}) AND county IS NOT NULL AND county != ''
+      AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
   `
   return rows.map(r => r.county as string)
 }
@@ -142,31 +127,24 @@ async function getAreasForCity(city: string): Promise<string[]> {
 function buildSlug(contentType: string, city: string, area?: string, intent?: string): string {
   const citySlug = slugify(city)
   switch (contentType) {
-    case 'city':
-      return `guides-${citySlug}`
-    case 'area':
-      return `guides-${citySlug}-${slugify(area || '')}`
-    case 'intent':
-      return `guides-${citySlug}-${intent || ''}`
-    default:
-      return `guides-${citySlug}`
+    case 'city': return `guides-${citySlug}`
+    case 'area': return `guides-${citySlug}-${slugify(area || '')}`
+    case 'intent': return `guides-${citySlug}-${intent || ''}`
+    default: return `guides-${citySlug}`
   }
 }
 
 function buildCanonicalUrl(contentType: string, city: string, area?: string, intent?: string): string {
   const citySlug = slugify(city)
   switch (contentType) {
-    case 'city':
-      return `/guides/${citySlug}`
-    case 'area':
-      return `/guides/${citySlug}/${slugify(area || '')}`
-    case 'intent':
-      return `/guides/${citySlug}/${intent || ''}`
-    default:
-      return `/guides/${citySlug}`
+    case 'city': return `/guides/${citySlug}`
+    case 'area': return `/guides/${citySlug}/${slugify(area || '')}`
+    case 'intent': return `/guides/${citySlug}/${intent || ''}`
+    default: return `/guides/${citySlug}`
   }
 }
 
+// ─── Core generation + auto-regeneration on low word count ───
 async function generateAndSavePost(
   contentType: string,
   prompt: string,
@@ -175,27 +153,53 @@ async function generateAndSavePost(
   autoPublish: boolean,
   area?: string,
   intent?: string,
-  faqsFromAI?: Array<{ question: string; answer: string }>,
 ) {
-  const result = await generateText({
+  const minWords = MIN_WORDS[contentType as keyof typeof MIN_WORDS] || 800
+
+  // First generation attempt
+  let result = await generateText({
     model: groq('llama-3.3-70b-versatile'),
     prompt,
   })
 
-  const post = parseJsonFromText(result.text)
+  let post = parseJsonFromText(result.text)
   if (!post || !post.content) {
     throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}`)
   }
 
-  const content = post.content as string
-  const wordCount = content.split(/\s+/).length
-  const minWords = contentType === 'area' ? 800 : 1000
+  let content = post.content as string
+  let wordCount = content.split(/\s+/).length
 
-  if (wordCount < minWords) {
-    throw new Error(`Content too short: ${wordCount} words (minimum ${minWords})`)
+  // Auto-regeneration: if under minimum, expand with a second pass
+  if (wordCount < minWords && contentType === 'city') {
+    console.log(`[v0] City guide for ${city} only ${wordCount} words (min ${minWords}), auto-expanding...`)
+    const expansionPrompt = buildCityGuideExpansionPrompt(city, content, wordCount)
+    await delay(2000)
+
+    result = await generateText({
+      model: groq('llama-3.3-70b-versatile'),
+      prompt: expansionPrompt,
+    })
+
+    const expandedPost = parseJsonFromText(result.text)
+    if (expandedPost?.content) {
+      const expandedContent = expandedPost.content as string
+      const expandedWordCount = expandedContent.split(/\s+/).length
+      if (expandedWordCount > wordCount) {
+        post = expandedPost
+        content = expandedContent
+        wordCount = expandedWordCount
+        console.log(`[v0] Expanded to ${wordCount} words`)
+      }
+    }
   }
 
-  const faqs = (post.faqs as Array<{ question: string; answer: string }>) || faqsFromAI || []
+  // Final validation -- reject if still too short (but lower threshold for expanded)
+  if (wordCount < Math.floor(minWords * 0.7)) {
+    throw new Error(`Content too short: ${wordCount} words (minimum ~${minWords})`)
+  }
+
+  const faqs = (post.faqs as Array<{ question: string; answer: string }>) || []
   const slug = buildSlug(contentType, city, area, intent)
   const canonicalUrl = buildCanonicalUrl(contentType, city, area, intent)
   const status = autoPublish ? 'published' : 'draft'
@@ -313,12 +317,14 @@ export async function POST(request: Request) {
 
     // ─── Generate City Guide ────────────────────
     if (action === 'generate_city' && city) {
+      // Count only paid venues (exclude playgrounds)
       const [venueStats] = await sql`
         SELECT COUNT(*) as cnt, MAX(county) as county
         FROM venues WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+          AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
       `
       if (Number(venueStats.cnt) === 0) {
-        return NextResponse.json({ success: false, message: `No active venues found in "${city}".` })
+        return NextResponse.json({ success: false, message: `No paid soft play venues found in "${city}". Only public playgrounds may exist there.` })
       }
 
       const slug = buildSlug('city', city)
@@ -351,7 +357,7 @@ export async function POST(request: Request) {
 
       const venues = await fetchVenuesForArea(city, area, 8)
       if (venues.length === 0) {
-        return NextResponse.json({ success: false, message: `No venues found for ${area}, ${city}` })
+        return NextResponse.json({ success: false, message: `No paid soft play venues found for ${area}, ${city}` })
       }
 
       const nearbyCities = await getNearbyCities(city, 3)
@@ -380,7 +386,7 @@ export async function POST(request: Request) {
 
       const venues = await fetchVenuesForIntent(city, intent as IntentType, 8)
       if (venues.length === 0) {
-        return NextResponse.json({ success: false, message: `No venues found in ${city}` })
+        return NextResponse.json({ success: false, message: `No paid soft play venues found in ${city}` })
       }
 
       const nearbyCities = await getNearbyCities(city, 3)
@@ -400,9 +406,10 @@ export async function POST(request: Request) {
       const [venueStats] = await sql`
         SELECT COUNT(*) as cnt
         FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region})
+          AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
       `
       if (Number(venueStats.cnt) === 0) {
-        return NextResponse.json({ success: false, message: `No active venues found in "${region}".` })
+        return NextResponse.json({ success: false, message: `No paid soft play venues found in "${region}".` })
       }
 
       const slug = `soft-play-centres-in-${slugify(region)}`
@@ -411,10 +418,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, message: `Region guide for ${region} already exists` })
       }
 
-      // Build a region-specific prompt
       const topCities = await sql`
         SELECT city, COUNT(*) as cnt
-        FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region}) AND city IS NOT NULL AND city != ''
+        FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region})
+          AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
+          AND city IS NOT NULL AND city != ''
         GROUP BY city ORDER BY cnt DESC LIMIT 8
       `
       const cityList = topCities.map((c, i) => `${i + 1}. ${c.city} (${c.cnt} venues)`).join('\n')
@@ -422,17 +430,20 @@ export async function POST(request: Request) {
       const prompt = `Write a comprehensive, SEO-optimised region guide titled "Soft Play Centres in ${region}" for Softplay UK.
 
 TARGET WORD COUNT: 1,200--1,800 words. Write in British English.
+IMPORTANT: This guide covers PAID indoor soft play centres only, NOT public parks or playgrounds.
 
 STRUCTURE:
-## Introduction: Family activities in ${region}, ${Number(venueStats.cnt)} venues across the region
+## Introduction: Family activities in ${region}, ${Number(venueStats.cnt)} paid indoor soft play venues across the region
 ## Top Areas to Visit: Reference these cities:\n${cityList}
-## What to Expect: Regional overview of play options
-## FAQs: 5--7 questions about soft play in ${region}
+## What to Expect: Regional overview of indoor play options
+## Prices & Booking Tips: General pricing guidance (do not fabricate specific prices)
+## FAQs: 5--7 questions about soft play in ${region} with 40--70 word answers
 ## Closing: CTA to explore the region, link to city guides
 
-QUALITY: Warm, helpful parent tone. No fluff, no fake stats.
+QUALITY: Warm, helpful parent tone. No fluff, no fake stats. UK English only.
+Do NOT include public parks, playgrounds, or free outdoor play areas in the main venue lists.
 
-Respond with ONLY valid JSON: {"title":"...","content":"... markdown ...","meta_title":"...","meta_description":"...","og_title":"...","og_description":"...","excerpt":"...","faqs":[{"question":"...","answer":"..."}]}`
+Respond with ONLY valid JSON: {"title":"...","content":"... markdown ...","meta_title":"... (max 60 chars, include 2026)","meta_description":"... (155-160 chars, mention indoor soft play centres)","og_title":"...","og_description":"...","excerpt":"...","faqs":[{"question":"...","answer":"..."}]}`
 
       const result = await generateText({ model: groq('llama-3.3-70b-versatile'), prompt })
       const post = parseJsonFromText(result.text)
@@ -467,15 +478,17 @@ Respond with ONLY valid JSON: {"title":"...","content":"... markdown ...","meta_
 
     // ─── Bulk Generate City Guides ──────────────
     if (action === 'bulk_generate') {
+      // Only count paid venues (exclude playgrounds)
       const cities = await sql`
         SELECT city, county, COUNT(*) as cnt
         FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != ''
+          AND category IN ('soft_play', 'adventure', 'trampoline_park', 'farm')
         GROUP BY city, county HAVING COUNT(*) >= 3
         ORDER BY COUNT(*) DESC LIMIT 50
       `
 
       if (cities.length === 0) {
-        return NextResponse.json({ success: false, message: 'No cities with 3+ venues found', generated: 0, skipped: 0, errors: [] })
+        return NextResponse.json({ success: false, message: 'No cities with 3+ paid soft play venues found', generated: 0, skipped: 0, errors: [] })
       }
 
       let generated = 0
