@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { generateText, Output } from 'ai'
+import { createGroq } from '@ai-sdk/groq'
 import { z } from 'zod'
 import { neon } from '@neondatabase/serverless'
 import { requireAdmin } from '@/lib/admin-auth'
+
+const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -119,7 +122,7 @@ export async function POST(request: Request) {
         if (type === 'all' || type === 'descriptions') {
           if (!venue.description || (venue.description as string).length < 20) {
             const descResult = await generateText({
-              model: 'openai/gpt-4o-mini',
+              model: groq('llama-3.3-70b-versatile'),
               prompt: `Write a brief, informative 2-3 sentence description for "${venueName}", which is ${categoryCtx} located in ${city}${county ? `, ${county}` : ''}, UK. ` +
                 `${venue.google_rating ? `It has a ${venue.google_rating}/5 Google rating.` : ''} ` +
                 `Write in a warm, factual tone suitable for parents looking for children's activities. Do not use quotation marks around the venue name. Do not start with "Welcome to". Just describe what the venue offers.`,
@@ -142,7 +145,7 @@ export async function POST(request: Request) {
                                 venue.is_sen_friendly || venue.has_baby_area || venue.has_outdoor
           if (!hasFacilities) {
             const facResult = await generateText({
-              model: 'openai/gpt-4o-mini',
+              model: groq('llama-3.3-70b-versatile'),
               prompt: `For "${venueName}", ${categoryCtx} in ${city}, UK, determine which facilities it likely has. ` +
                 `Be realistic based on the type of venue. For public playgrounds, typically: no cafe, free parking nearby, no party rooms, may have baby area. ` +
                 `For soft play centres, typically: cafe, parking, party rooms available, baby area. Return true/false for each.`,
@@ -181,7 +184,7 @@ export async function POST(request: Request) {
             if (reviewCount > 0) {
               const baseRating = venue.google_rating ? Number(venue.google_rating) : 3.5 + Math.random()
               const reviewResult = await generateText({
-                model: 'openai/gpt-4o-mini',
+                model: groq('llama-3.3-70b-versatile'),
                 prompt: `Write ${reviewCount} realistic parent reviews for "${venueName}", ${categoryCtx} in ${city}, UK. ` +
                   `${venue.google_rating ? `The venue has a ${venue.google_rating}/5 Google rating.` : ''} ` +
                   `Reviews should be from British parents who visited with their children. ` +
