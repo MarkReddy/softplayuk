@@ -52,7 +52,7 @@ export default async function BlogPage() {
     sql`SELECT category, COUNT(*) as cnt FROM venues WHERE status = 'active' GROUP BY category ORDER BY cnt DESC`,
     sql`SELECT city, LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) as slug, COUNT(*) as cnt FROM venues WHERE status = 'active' AND city IS NOT NULL AND city != '' GROUP BY city, LOWER(REPLACE(REPLACE(city, ' ', '-'), '''', '')) ORDER BY cnt DESC LIMIT 20`,
     sql`SELECT COUNT(*) as cnt FROM venues WHERE status = 'active'`,
-    sql`SELECT slug, title, excerpt, city, region, word_count, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC LIMIT 12`,
+    sql`SELECT slug, title, excerpt, city, region, content_type, intent, area, canonical_url, word_count, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC LIMIT 12`,
   ])
 
   const regions = regionsRaw as unknown as RegionSummary[]
@@ -96,10 +96,12 @@ export default async function BlogPage() {
                 Latest guides
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {publishedPosts.map((post) => (
+                {publishedPosts.map((post) => {
+                  const href = (post.canonical_url as string) || `/blog/post/${post.slug}`
+                  return (
                   <Link
                     key={post.slug as string}
-                    href={`/blog/post/${post.slug}`}
+                    href={href}
                     className="group rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-sm"
                   >
                     <h3 className="mb-2 font-serif text-base font-bold text-foreground transition-colors group-hover:text-primary line-clamp-2">
@@ -116,7 +118,8 @@ export default async function BlogPage() {
                       )}
                     </div>
                   </Link>
-                ))}
+                  )
+                })}
               </div>
             </section>
           )}
