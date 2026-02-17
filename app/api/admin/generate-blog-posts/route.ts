@@ -33,53 +33,101 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/** Extract a delimited field from AI output: <TAG>value</TAG> */
+/** Extract a delimited field from AI output: <TAG>value</TAG> -- case insensitive */
 function extractTag(text: string, tag: string): string {
-  const openTag = `<${tag}>`
-  const closeTag = `</${tag}>`
-  const start = text.indexOf(openTag)
-  const end = text.indexOf(closeTag)
-  if (start === -1 || end === -1 || end <= start) return ''
-  return text.slice(start + openTag.length, end).trim()
+  // Try exact case first, then case-insensitive
+  for (const t of [tag, tag.toLowerCase(), tag.toUpperCase()]) {
+    const openTag = `<${t}>`
+    const closeTag = `</${t}>`
+    const start = text.indexOf(openTag)
+    const end = text.indexOf(closeTag, start + openTag.length)
+    if (start !== -1 && end !== -1 && end > start) {
+      return text.slice(start + openTag.length, end).trim()
+    }
+  }
+  // Regex fallback for any casing
+  const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i')
+  const m = text.match(re)
+  return m ? m[1].trim() : ''
 }
 
 /** Parse FAQ block: "Q: ...\nA: ..." pairs */
 function parseFaqs(faqText: string): Array<{ question: string; answer: string }> {
+  if (!faqText) return []
   const faqs: Array<{ question: string; answer: string }> = []
-  const pairs = faqText.split(/\n\s*Q:\s*/i).filter(Boolean)
+  // Split on Q: patterns (with optional numbering)
+  const pairs = faqText.split(/\n\s*(?:\d+\.\s*)?Q:\s*/i).filter(s => s.trim())
   for (const pair of pairs) {
-    const cleaned = pair.startsWith('Q:') ? pair.slice(2).trim() : pair.trim()
+    const cleaned = pair.replace(/^Q:\s*/i, '').trim()
     const aIndex = cleaned.search(/\nA:\s*/i)
     if (aIndex === -1) continue
-    const question = cleaned.slice(0, aIndex).trim().replace(/^\d+\.\s*/, '')
-    const answer = cleaned.slice(aIndex).replace(/^A:\s*/i, '').trim()
-    if (question && answer) faqs.push({ question, answer })
+    const question = cleaned.slice(0, aIndex).trim().replace(/^\d+\.\s*/, '').replace(/\?$/, '') + '?'
+    const answer = cleaned.slice(aIndex).replace(/^\nA:\s*/i, '').trim()
+    if (question.length > 5 && answer.length > 5) faqs.push({ question, answer })
   }
   return faqs
 }
 
+/** Fix literal newlines inside JSON strings using char-by-char scan */
+function fixJsonNewlines(jsonStr: string): string {
+  let fixed = ''
+  let inStr = false
+  let esc = false
+  for (let i = 0; i < jsonStr.length; i++) {
+    const ch = jsonStr[i]
+    if (esc) { fixed += ch; esc = false; continue }
+    if (ch === '\\') { fixed += ch; esc = true; continue }
+    if (ch === '"') { inStr = !inStr; fixed += ch; continue }
+    if (inStr && ch === '\n') { fixed += '\\n'; continue }
+    if (inStr && ch === '\r') { continue }
+    if (inStr && ch === '\t') { fixed += '\\t'; continue }
+    fixed += ch
+  }
+  return fixed
+}
+
 /** Parse AI response -- supports delimited format (primary) and JSON (fallback) */
 function parseAIResponse(text: string): Record<string, unknown> | null {
-  // PRIMARY: Delimited tag format
+  console.log('[v0] parseAIResponse called, text length:', text?.length, 'first 200 chars:', text?.substring(0, 200))
+
+  // PRIMARY: Delimited tag format <CONTENT>...</CONTENT>
   const content = extractTag(text, 'CONTENT')
-  if (content && content.length > 100) {
-    return {
-      title: extractTag(text, 'TITLE'),
+  console.log('[v0] extractTag CONTENT result length:', content?.length || 0)
+  if (content && content.length > 50) {
+    const result = {
+      title: extractTag(text, 'TITLE') || 'Untitled Guide',
       content,
-      meta_title: extractTag(text, 'META_TITLE'),
-      meta_description: extractTag(text, 'META_DESCRIPTION'),
-      excerpt: extractTag(text, 'EXCERPT'),
+      meta_title: extractTag(text, 'META_TITLE') || '',
+      meta_description: extractTag(text, 'META_DESCRIPTION') || '',
+      excerpt: extractTag(text, 'EXCERPT') || '',
       faqs: parseFaqs(extractTag(text, 'FAQS')),
     }
+    console.log('[v0] Delimited parse SUCCESS. Title:', result.title, 'Content length:', content.length)
+    return result
   }
 
   // FALLBACK 1: Direct JSON parse
-  try { return JSON.parse(text) } catch { /* continue */ }
+  try {
+    const parsed = JSON.parse(text)
+    console.log('[v0] Direct JSON parse SUCCESS')
+    return parsed
+  } catch { /* continue */ }
 
   // FALLBACK 2: JSON in markdown code block
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch) {
-    try { return JSON.parse(codeBlockMatch[1].trim()) } catch { /* continue */ }
+    try {
+      const parsed = JSON.parse(codeBlockMatch[1].trim())
+      console.log('[v0] Code block JSON parse SUCCESS')
+      return parsed
+    } catch {
+      // Try fixing newlines in code block JSON
+      try {
+        const parsed = JSON.parse(fixJsonNewlines(codeBlockMatch[1].trim()))
+        console.log('[v0] Code block fixed JSON parse SUCCESS')
+        return parsed
+      } catch { /* continue */ }
+    }
   }
 
   // FALLBACK 3: Extract outermost braces and fix newlines
@@ -87,27 +135,40 @@ function parseAIResponse(text: string): Record<string, unknown> | null {
   const braceEnd = text.lastIndexOf('}')
   if (braceStart !== -1 && braceEnd > braceStart) {
     const candidate = text.slice(braceStart, braceEnd + 1)
-    try { return JSON.parse(candidate) } catch { /* continue */ }
-
-    // Fix literal newlines inside JSON strings
     try {
-      let fixed = ''
-      let inStr = false
-      let esc = false
-      for (let i = 0; i < candidate.length; i++) {
-        const ch = candidate[i]
-        if (esc) { fixed += ch; esc = false; continue }
-        if (ch === '\\') { fixed += ch; esc = true; continue }
-        if (ch === '"') { inStr = !inStr; fixed += ch; continue }
-        if (inStr && ch === '\n') { fixed += '\\n'; continue }
-        if (inStr && ch === '\r') { continue }
-        if (inStr && ch === '\t') { fixed += '\\t'; continue }
-        fixed += ch
-      }
-      return JSON.parse(fixed)
+      const parsed = JSON.parse(candidate)
+      console.log('[v0] Brace extraction JSON parse SUCCESS')
+      return parsed
     } catch { /* continue */ }
+
+    try {
+      const parsed = JSON.parse(fixJsonNewlines(candidate))
+      console.log('[v0] Fixed newlines JSON parse SUCCESS')
+      return parsed
+    } catch (e) {
+      console.error('[v0] Fixed newlines JSON still failed:', (e as Error).message)
+    }
   }
 
+  // FALLBACK 4: If text looks like markdown with ## headings, treat the entire response as content
+  if (text.includes('## ') && text.length > 500) {
+    console.log('[v0] FALLBACK: Treating entire response as raw markdown content')
+    // Extract a title from the first line or first heading
+    const titleMatch = text.match(/^#\s+(.+)/m) || text.match(/^(.+)\n/)
+    const title = titleMatch ? titleMatch[1].trim() : 'Guide'
+    // Strip any leading # heading since it becomes the title
+    const body = text.replace(/^#\s+.+\n?/, '').trim()
+    return {
+      title,
+      content: body,
+      meta_title: '',
+      meta_description: '',
+      excerpt: body.substring(0, 200),
+      faqs: [],
+    }
+  }
+
+  console.error('[v0] ALL parse methods failed. Full text:', text.substring(0, 1000))
   return null
 }
 
@@ -230,8 +291,9 @@ async function generateAndSavePost(
 
   let post = parseAIResponse(result.text)
   if (!post || !post.content) {
-    console.error(`[v0] Unparseable AI response for ${city}. First 500 chars:`, result.text?.substring(0, 500))
-    throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}. Preview: ${result.text?.substring(0, 150)}`)
+    const preview = result.text?.substring(0, 300) || 'empty'
+    console.error(`[v0] ALL PARSERS FAILED for ${city}. Length: ${result.text?.length}. Full preview:`, preview)
+    throw new Error(`AI returned unparseable content (len: ${result.text?.length || 0}). First 200 chars: ${result.text?.substring(0, 200)}`)
   }
 
   let content = post.content as string
