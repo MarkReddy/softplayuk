@@ -22,7 +22,7 @@ export const maxDuration = 300
 const sql = neon(process.env.DATABASE_URL!)
 
 // Minimum word counts by content type
-const MIN_WORDS = { city: 1100, area: 800, intent: 900, region: 800 } as const
+const MIN_WORDS = { city: 1100, area: 500, intent: 600, region: 500 } as const
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -220,9 +220,15 @@ async function generateAndSavePost(
   let wordCount = content.split(/\s+/).length
 
   // Auto-regeneration: if under minimum, expand with a second pass
-  if (wordCount < minWords && contentType === 'city') {
-    console.log(`[v0] City guide for ${city} only ${wordCount} words (min ${minWords}), auto-expanding...`)
-    const expansionPrompt = buildCityGuideExpansionPrompt(city, content, wordCount)
+  if (wordCount < minWords) {
+    const label = contentType === 'city' ? city : area || intent || city
+    console.log(`[v0] ${contentType} guide for ${label} only ${wordCount} words (min ${minWords}), auto-expanding...`)
+    const expansionPrompt = contentType === 'city'
+      ? buildCityGuideExpansionPrompt(city, content, wordCount)
+      : `You previously wrote the following ${contentType} guide about "${label}" but it was only ${wordCount} words. ` +
+        `Please rewrite it to be at least ${minWords} words. Add more detail, expand each section, include more specific tips and recommendations. ` +
+        `Return ONLY valid JSON with keys: title, content (markdown string), excerpt, meta_title, meta_description, faqs (array of {question, answer}).` +
+        `\n\nOriginal content:\n${content}`
     await delay(2000)
 
     result = await generateText({
@@ -243,9 +249,9 @@ async function generateAndSavePost(
     }
   }
 
-  // Final validation -- reject if still too short (but lower threshold for expanded)
-  if (wordCount < Math.floor(minWords * 0.7)) {
-    throw new Error(`Content too short: ${wordCount} words (minimum ~${minWords})`)
+  // Final validation -- accept content above 50% of minimum (small towns may have fewer venues)
+  if (wordCount < Math.floor(minWords * 0.5)) {
+    throw new Error(`Content too short: ${wordCount} words (minimum ~${Math.floor(minWords * 0.5)})`)
   }
 
   const faqs = (post.faqs as Array<{ question: string; answer: string }>) || []
