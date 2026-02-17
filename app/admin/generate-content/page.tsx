@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AdminAuthProvider, useAdminAuth } from '@/components/admin-auth-provider'
@@ -14,27 +14,55 @@ export default function GenerateContentPage() {
   )
 }
 
+interface Stats {
+  total: number
+  withDescription: number
+  withFacilities: number
+  withReviews: number
+  missingDescription: number
+  missingFacilities: number
+}
+
 function GenerateContentGate() {
   const { isAuthenticated, fetchWithAuth } = useAdminAuth()
   const [running, setRunning] = useState(false)
   const [log, setLog] = useState<string[]>([])
-  const [progress, setProgress] = useState({ processed: 0, total: 0 })
-  const [batchSize] = useState(20)
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [progress, setProgress] = useState({ processed: 0, total: 0, succeeded: 0, failed: 0 })
+  const [batchSize] = useState(10)
   const [type, setType] = useState<'all' | 'descriptions' | 'reviews' | 'facilities'>('all')
 
   const appendLog = useCallback((msg: string) => {
-    setLog((prev) => [...prev.slice(-100), `[${new Date().toLocaleTimeString()}] ${msg}`])
+    setLog((prev) => [...prev.slice(-200), `[${new Date().toLocaleTimeString()}] ${msg}`])
   }, [])
 
-  const runBatch = useCallback(async (offset: number): Promise<number> => {
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth('/api/admin/generate-content')
+      if (res.ok) {
+        const data = await res.json()
+        setStats(data)
+        setProgress((p) => ({ ...p, total: data.total }))
+      }
+    } catch {}
+  }, [fetchWithAuth])
+
+  useEffect(() => {
+    if (isAuthenticated) fetchStats()
+  }, [isAuthenticated, fetchStats])
+
+  const runBatch = useCallback(async (offset: number): Promise<{ nextOffset: number; done: boolean; processed: number; errors: number; errorDetails: string[] }> => {
     const res = await fetchWithAuth('/api/admin/generate-content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batchSize, offset, type }),
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed')
-    return data.done ? -1 : data.nextOffset
+    const text = await res.text()
+    if (!text) throw new Error(`Empty response (status ${res.status})`)
+    let data
+    try { data = JSON.parse(text) } catch { throw new Error(`Invalid JSON: ${text.substring(0, 200)}`) }
+    if (!res.ok) throw new Error(data.error || 'API error')
+    return data
   }, [fetchWithAuth, batchSize, type])
 
   if (!isAuthenticated) return <AdminLogin />
@@ -42,38 +70,52 @@ function GenerateContentGate() {
   const handleStart = async () => {
     setRunning(true)
     setLog([])
+    setProgress({ processed: 0, total: stats?.total || 2000, succeeded: 0, failed: 0 })
+
     let offset = 0
     let batchNum = 0
-
-    // First get total count
-    try {
-      const countRes = await fetch('/api/venues/count')
-      const countData = await countRes.json()
-      setProgress({ processed: 0, total: countData.count || 2000 })
-    } catch {
-      setProgress({ processed: 0, total: 2000 })
-    }
+    let totalSucceeded = 0
+    let totalFailed = 0
 
     try {
-      while (offset >= 0) {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
         batchNum++
-        appendLog(`Starting batch ${batchNum} (offset ${offset}, batch size ${batchSize})...`)
-        const nextOffset = await runBatch(offset)
-        if (nextOffset === -1) {
+        appendLog(`Batch ${batchNum}: processing venues ${offset + 1}-${offset + batchSize}...`)
+
+        const result = await runBatch(offset)
+
+        totalSucceeded += result.processed
+        totalFailed += result.errors
+        setProgress({
+          processed: offset + batchSize,
+          total: stats?.total || 2000,
+          succeeded: totalSucceeded,
+          failed: totalFailed,
+        })
+
+        if (result.errors > 0 && result.errorDetails?.length > 0) {
+          result.errorDetails.forEach((e: string) => appendLog(`  ERROR: ${e}`))
+        }
+
+        appendLog(`Batch ${batchNum} complete: ${result.processed} succeeded, ${result.errors} failed`)
+
+        if (result.done) {
           appendLog('All venues processed!')
           break
         }
-        setProgress((prev) => ({ ...prev, processed: nextOffset }))
-        appendLog(`Batch ${batchNum} dispatched. Moving to offset ${nextOffset}...`)
-        // Small delay between batches to avoid rate limits
-        await new Promise((r) => setTimeout(r, 2000))
-        offset = nextOffset
+
+        offset = result.nextOffset
+        // Delay between batches to stay within Groq rate limits
+        await new Promise((r) => setTimeout(r, 3000))
       }
     } catch (err) {
-      appendLog(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      appendLog(`FATAL: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setRunning(false)
-      appendLog('Generation run complete.')
+      appendLog(`Generation complete. Total: ${totalSucceeded} succeeded, ${totalFailed} failed.`)
+      // Refresh stats
+      fetchStats()
     }
   }
 
@@ -90,6 +132,27 @@ function GenerateContentGate() {
           Back to Backfill
         </Link>
       </div>
+
+      {stats && (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+            <p className="text-xs text-muted-foreground">Total Venues</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <p className="text-2xl font-bold text-brand-green">{stats.withDescription}</p>
+            <p className="text-xs text-muted-foreground">With Description</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <p className="text-2xl font-bold text-brand-green">{stats.withFacilities}</p>
+            <p className="text-xs text-muted-foreground">With Facilities</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <p className="text-2xl font-bold text-brand-green">{stats.withReviews}</p>
+            <p className="text-xs text-muted-foreground">With Reviews</p>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-6">
         <div className="rounded-2xl border border-border bg-card p-6">
@@ -109,26 +172,36 @@ function GenerateContentGate() {
             </select>
           </div>
           <p className="mb-4 text-xs text-muted-foreground">
-            Processes {batchSize} venues at a time with AI. Each batch takes ~30-60 seconds.
-            For ~2,000 venues this will take approximately 30-60 minutes total.
+            Processes {batchSize} venues at a time synchronously. Each batch waits for AI responses before reporting results.
+            For ~2,000 venues this will take approximately 1-2 hours total.
           </p>
           <Button onClick={handleStart} disabled={running} size="lg">
-            {running ? `Running... (${progress.processed}/${progress.total})` : 'Start Generation'}
+            {running ? `Running...` : 'Start Generation'}
           </Button>
         </div>
 
-        {progress.total > 0 && (
+        {(running || progress.succeeded > 0 || progress.failed > 0) && (
           <div className="rounded-2xl border border-border bg-card p-6">
             <h3 className="mb-2 font-serif text-lg font-bold">Progress</h3>
             <div className="mb-2 h-3 overflow-hidden rounded-full bg-secondary">
               <div
                 className="h-full rounded-full bg-primary transition-all duration-300"
-                style={{ width: `${Math.min((progress.processed / progress.total) * 100, 100)}%` }}
+                style={{ width: `${Math.min((progress.processed / Math.max(progress.total, 1)) * 100, 100)}%` }}
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              {progress.processed} / {progress.total} venues dispatched
-            </p>
+            <div className="flex gap-6 text-sm">
+              <p className="text-muted-foreground">
+                {Math.min(progress.processed, progress.total)} / {progress.total} venues
+              </p>
+              <p className="font-medium text-brand-green">
+                {progress.succeeded} succeeded
+              </p>
+              {progress.failed > 0 && (
+                <p className="font-medium text-destructive">
+                  {progress.failed} failed
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -137,7 +210,9 @@ function GenerateContentGate() {
             <h3 className="mb-2 font-serif text-lg font-bold">Log</h3>
             <div className="max-h-80 overflow-y-auto rounded-xl bg-secondary/50 p-4 font-mono text-xs text-muted-foreground">
               {log.map((line, i) => (
-                <div key={i} className="py-0.5">{line}</div>
+                <div key={i} className={`py-0.5 ${line.includes('ERROR') ? 'text-destructive' : ''} ${line.includes('succeeded') ? 'text-brand-green' : ''}`}>
+                  {line}
+                </div>
               ))}
             </div>
           </div>
