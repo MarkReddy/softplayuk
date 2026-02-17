@@ -21,8 +21,9 @@ export const maxDuration = 300
 
 const sql = neon(process.env.DATABASE_URL!)
 
-// Minimum word counts by content type
-const MIN_WORDS = { city: 1100, area: 500, intent: 600, region: 500 } as const
+// Target word counts (auto-expansion triggers below these)
+// Hard rejection only below 250 words -- anything above is valid SEO content
+const MIN_WORDS = { city: 800, area: 400, intent: 400, region: 400 } as const
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -249,9 +250,9 @@ async function generateAndSavePost(
     }
   }
 
-  // Final validation -- accept content above 50% of minimum (small towns may have fewer venues)
-  if (wordCount < Math.floor(minWords * 0.5)) {
-    throw new Error(`Content too short: ${wordCount} words (minimum ~${Math.floor(minWords * 0.5)})`)
+  // Final validation -- only reject truly empty/broken responses (under 250 words)
+  if (wordCount < 250) {
+    throw new Error(`Content too short: ${wordCount} words (minimum 250)`)
   }
 
   const faqs = (post.faqs as Array<{ question: string; answer: string }>) || []
