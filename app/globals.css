@@ -10,64 +10,66 @@
 
 @layer base {
   :root {
-    /* Warm cream / pale oat background */
-    --background: 34 40% 96%;
-    --foreground: 25 15% 22%;
+    /* Light, clean white background */
+    --background: 0 0% 99%;
+    --foreground: 240 30% 20%;
 
-    /* Card: slightly warmer than background */
-    --card: 36 50% 98%;
-    --card-foreground: 25 15% 22%;
+    /* Card: crisp white */
+    --card: 0 0% 100%;
+    --card-foreground: 240 30% 20%;
 
-    --popover: 36 50% 98%;
-    --popover-foreground: 25 15% 22%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 30% 20%;
 
-    /* Primary: warm terracotta / clay */
-    --primary: 16 50% 52%;
-    --primary-foreground: 36 50% 98%;
+    /* Primary: deep indigo/navy from the logo figure */
+    --primary: 244 34% 42%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary: soft peach wash */
-    --secondary: 28 45% 93%;
-    --secondary-foreground: 25 15% 22%;
+    /* Secondary: soft indigo wash */
+    --secondary: 244 30% 95%;
+    --secondary-foreground: 244 34% 30%;
 
-    /* Muted: warm stone */
-    --muted: 30 25% 91%;
-    --muted-foreground: 25 10% 48%;
+    /* Muted: cool neutral gray */
+    --muted: 240 10% 94%;
+    --muted-foreground: 240 10% 45%;
 
-    /* Accent: soft sage green */
-    --accent: 148 25% 48%;
-    --accent-foreground: 36 50% 98%;
+    /* Accent: brand green from logo tagline */
+    --accent: 155 55% 45%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 60% 48%;
-    --destructive-foreground: 36 50% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    /* Warm, soft borders */
-    --border: 30 20% 87%;
-    --input: 30 20% 87%;
-    --ring: 16 50% 52%;
+    /* Cool, clean borders */
+    --border: 240 10% 90%;
+    --input: 240 10% 90%;
+    --ring: 244 34% 42%;
 
-    --chart-1: 16 50% 52%;
-    --chart-2: 148 25% 48%;
-    --chart-3: 28 45% 65%;
-    --chart-4: 340 30% 65%;
-    --chart-5: 200 25% 55%;
+    /* Chart colors from logo confetti */
+    --chart-1: 244 34% 42%;
+    --chart-2: 155 55% 45%;
+    --chart-3: 350 70% 65%;
+    --chart-4: 265 45% 68%;
+    --chart-5: 175 45% 55%;
 
-    /* Bigger radius for organic feel */
-    --radius: 1rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 34 40% 96%;
-    --sidebar-foreground: 25 15% 22%;
-    --sidebar-primary: 16 50% 52%;
-    --sidebar-primary-foreground: 36 50% 98%;
-    --sidebar-accent: 28 45% 93%;
-    --sidebar-accent-foreground: 25 15% 22%;
-    --sidebar-border: 30 20% 87%;
-    --sidebar-ring: 16 50% 52%;
+    --sidebar-background: 0 0% 99%;
+    --sidebar-foreground: 240 30% 20%;
+    --sidebar-primary: 244 34% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 244 30% 95%;
+    --sidebar-accent-foreground: 244 34% 30%;
+    --sidebar-border: 240 10% 90%;
+    --sidebar-ring: 244 34% 42%;
 
-    /* Custom tokens for pastel washes */
-    --wash-peach: 20 60% 94%;
-    --wash-clay: 16 35% 92%;
-    --wash-lavender: 260 30% 94%;
-    --wash-sage: 148 25% 93%;
+    /* Brand confetti accent colors */
+    --brand-indigo: 244 34% 42%;
+    --brand-green: 155 55% 45%;
+    --brand-coral: 350 70% 65%;
+    --brand-lavender: 265 45% 68%;
+    --brand-teal: 175 45% 55%;
+    --brand-orange: 30 85% 58%;
   }
 }
 
