@@ -29,7 +29,7 @@ function GenerateContentGate() {
   const [log, setLog] = useState<string[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [progress, setProgress] = useState({ processed: 0, total: 0, succeeded: 0, failed: 0 })
-  const [batchSize] = useState(10)
+  const [batchSize] = useState(5)
   const [type, setType] = useState<'all' | 'descriptions' | 'reviews' | 'facilities'>('all')
 
   const appendLog = useCallback((msg: string) => {
@@ -106,8 +106,8 @@ function GenerateContentGate() {
         }
 
         offset = result.nextOffset
-        // Delay between batches to stay within Groq rate limits
-        await new Promise((r) => setTimeout(r, 3000))
+        // Brief delay between batches for Groq rate limits
+        await new Promise((r) => setTimeout(r, 1500))
       }
     } catch (err) {
       appendLog(`FATAL: ${err instanceof Error ? err.message : String(err)}`)
@@ -172,8 +172,8 @@ function GenerateContentGate() {
             </select>
           </div>
           <p className="mb-4 text-xs text-muted-foreground">
-            Processes {batchSize} venues at a time synchronously. Each batch waits for AI responses before reporting results.
-            For ~2,000 venues this will take approximately 1-2 hours total.
+            Processes {batchSize} venues per batch with parallel AI calls per venue (description + facilities + reviews run simultaneously).
+            Each batch completes in ~30-45 seconds. For ~2,000 venues this will take approximately 3-4 hours total.
           </p>
           <Button onClick={handleStart} disabled={running} size="lg">
             {running ? `Running...` : 'Start Generation'}
