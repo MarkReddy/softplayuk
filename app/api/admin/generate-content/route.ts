@@ -52,18 +52,22 @@ function parseJsonFromText(text: string): unknown {
     const candidate = text.slice(braceStart, braceEnd + 1)
     try { return JSON.parse(candidate) } catch {}
 
-    // 4. Fix unescaped newlines inside string values
+    // 4. Fix unescaped newlines: replace literal newlines inside strings
     try {
-      const fixed = candidate
-        .replace(/:\s*"([\s\S]*?)"\s*([,}])/g, (_m, val, end) => {
-          const escaped = val
-            .replace(/\\/g, '\\\\')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t')
-            .replace(/(?<!\\)"/g, '\\"')
-          return `: "${escaped}"${end}`
-        })
+      // Simple but effective: escape all literal newlines between quotes
+      let fixed = ''
+      let inString = false
+      let escaped = false
+      for (let i = 0; i < candidate.length; i++) {
+        const ch = candidate[i]
+        if (escaped) { fixed += ch; escaped = false; continue }
+        if (ch === '\\') { fixed += ch; escaped = true; continue }
+        if (ch === '"') { inString = !inString; fixed += ch; continue }
+        if (inString && ch === '\n') { fixed += '\\n'; continue }
+        if (inString && ch === '\r') { continue }
+        if (inString && ch === '\t') { fixed += '\\t'; continue }
+        fixed += ch
+      }
       return JSON.parse(fixed)
     } catch {}
   }

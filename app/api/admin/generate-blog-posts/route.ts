@@ -50,46 +50,98 @@ function parseJsonFromText(text: string): Record<string, unknown> | null {
     const jsonCandidate = text.slice(braceStart, braceEnd + 1)
     try { return JSON.parse(jsonCandidate) } catch { /* continue */ }
 
-    // 4. Fix common LLM JSON issues: unescaped newlines inside string values
+    // 3.5. Character-by-character string fixer: escape literal newlines inside JSON strings
     try {
-      const fixed = jsonCandidate
-        .replace(/:\s*"([\s\S]*?)"\s*([,}])/g, (_match, value, end) => {
-          const escaped = value
-            .replace(/\\/g, '\\\\')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t')
-            .replace(/(?<!\\)"/g, '\\"')
-          return `: "${escaped}"${end}`
-        })
+      let fixed = ''
+      let inStr = false
+      let esc = false
+      for (let i = 0; i < jsonCandidate.length; i++) {
+        const ch = jsonCandidate[i]
+        if (esc) { fixed += ch; esc = false; continue }
+        if (ch === '\\') { fixed += ch; esc = true; continue }
+        if (ch === '"') { inStr = !inStr; fixed += ch; continue }
+        if (inStr && ch === '\n') { fixed += '\\n'; continue }
+        if (inStr && ch === '\r') { continue }
+        if (inStr && ch === '\t') { fixed += '\\t'; continue }
+        fixed += ch
+      }
       return JSON.parse(fixed)
     } catch { /* continue */ }
-
-    // 5. Last resort: extract key fields manually with regex
-    try {
-      const extract = (key: string): string => {
-        const re = new RegExp(`"${key}"\\s*:\\s*"([\\s\\S]*?)"\\s*[,}]`)
-        const m = jsonCandidate.match(re)
-        return m ? m[1].replace(/\n/g, '\\n').replace(/(?<!\\)"/g, '\\"') : ''
-      }
-      const title = extract('title')
-      const content = extract('content')
-      const excerpt = extract('excerpt')
-      const meta_title = extract('meta_title')
-      const meta_description = extract('meta_description')
-
-      if (content) {
-        // Try to extract faqs array
-        let faqs: Array<{ question: string; answer: string }> = []
-        const faqMatch = jsonCandidate.match(/"faqs"\s*:\s*(\[[\s\S]*?\])\s*[,}]/)
-        if (faqMatch) {
-          try { faqs = JSON.parse(faqMatch[1]) } catch { /* skip faqs */ }
-        }
-
-        return { title, content, excerpt, meta_title, meta_description, faqs }
-      }
-    } catch { /* continue */ }
   }
+
+  // 4. Field-by-field extraction -- most reliable for LLM output with unescaped content
+  // This handles the common case where the JSON has literal newlines inside string values
+  try {
+    const extractField = (key: string, src: string): string => {
+      // Find "key": " then capture everything until we find a closing pattern
+      // Use a greedy approach: find the key, then scan forward for the value boundaries
+      const keyPattern = new RegExp(`"${key}"\\s*:\\s*"`)
+      const keyMatch = keyPattern.exec(src)
+      if (!keyMatch) return ''
+
+      const valueStart = keyMatch.index + keyMatch[0].length
+      // Scan for the end of the string value -- find unescaped quote followed by , or } or \n"
+      let depth = 0
+      let i = valueStart
+      while (i < src.length) {
+        if (src[i] === '\\') { i += 2; continue } // skip escaped chars
+        if (src[i] === '"') {
+          // Check what follows: skip whitespace then check for , or } or next key
+          let j = i + 1
+          while (j < src.length && (src[j] === ' ' || src[j] === '\r' || src[j] === '\t')) j++
+          if (src[j] === ',' || src[j] === '}' || src[j] === '\n') {
+            return src.slice(valueStart, i)
+          }
+        }
+        i++
+      }
+      // Fallback: take everything to next unescaped quote
+      const endQuote = src.indexOf('"', valueStart)
+      return endQuote > valueStart ? src.slice(valueStart, endQuote) : ''
+    }
+
+    const raw = text.slice(braceStart !== -1 ? braceStart : 0, braceEnd !== -1 ? braceEnd + 1 : text.length)
+
+    // For content field, use a special approach: find "content": " and grab until the next top-level key
+    const contentKeyMatch = raw.match(/"content"\s*:\s*"/)
+    let content = ''
+    if (contentKeyMatch && contentKeyMatch.index !== undefined) {
+      const valStart = contentKeyMatch.index + contentKeyMatch[0].length
+      // Find the next top-level key like "excerpt", "meta_title", "faqs" etc.
+      const nextKeyPattern = /"\s*,\s*\n?\s*"(excerpt|meta_title|meta_description|faqs|title)"\s*:/g
+      nextKeyPattern.lastIndex = valStart
+      const nextKeyMatch = nextKeyPattern.exec(raw)
+      if (nextKeyMatch && nextKeyMatch.index !== undefined) {
+        content = raw.slice(valStart, nextKeyMatch.index)
+      } else {
+        // Take until last }
+        content = raw.slice(valStart, raw.lastIndexOf('"'))
+      }
+    }
+
+    const title = extractField('title', raw)
+    const excerpt = extractField('excerpt', raw)
+    const meta_title = extractField('meta_title', raw)
+    const meta_description = extractField('meta_description', raw)
+
+    if (content && content.length > 100) {
+      // Try to extract faqs array
+      let faqs: Array<{ question: string; answer: string }> = []
+      const faqMatch = raw.match(/"faqs"\s*:\s*(\[[\s\S]*?\])\s*[,}]?\s*$/)
+      if (faqMatch) {
+        try { faqs = JSON.parse(faqMatch[1]) } catch { /* skip faqs */ }
+      }
+
+      // Clean up content: unescape \\n to real newlines for markdown
+      const cleanContent = content
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+        .trim()
+
+      return { title, content: cleanContent, excerpt, meta_title, meta_description, faqs }
+    }
+  } catch { /* continue */ }
 
   return null
 }
