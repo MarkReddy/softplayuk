@@ -25,8 +25,8 @@ export function HowItWorks() {
   return (
     <section className="relative overflow-hidden py-20">
       {/* Subtle pastel wash background */}
-      <div className="absolute -right-32 -top-32 h-64 w-64 rounded-full bg-[hsl(var(--wash-peach))] opacity-60 blur-3xl" />
-      <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-[hsl(var(--wash-sage))] opacity-40 blur-3xl" />
+      <div className="absolute -right-32 -top-32 h-64 w-64 rounded-full bg-[hsl(var(--brand-coral))] opacity-15 blur-3xl" />
+      <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-[hsl(var(--brand-teal))] opacity-15 blur-3xl" />
 
       <div className="relative mx-auto max-w-3xl px-5">
         <h2 className="mb-3 text-center text-2xl font-bold text-foreground">

@@ -5,26 +5,31 @@ const signals = [
     icon: Users,
     value: '40,000+',
     label: 'Parents trust us',
+    color: 'text-brand-indigo',
   },
   {
     icon: MapPin,
     value: '2,000+',
     label: 'Venues listed',
+    color: 'text-brand-green',
   },
   {
     icon: Sparkles,
     value: '4.7',
     label: 'Average rating',
+    color: 'text-brand-coral',
   },
   {
     icon: ShieldCheck,
     value: '100%',
     label: 'Verified reviews',
+    color: 'text-brand-teal',
   },
   {
     icon: Heart,
     value: '#1',
     label: 'UK soft play site',
+    color: 'text-brand-lavender',
   },
 ]
 
@@ -38,7 +43,7 @@ export function TrustSignals() {
         <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
           {signals.map((signal, i) => (
             <div key={i} className="text-center">
-              <signal.icon className="mx-auto mb-2.5 h-5 w-5 text-primary/70" />
+              <signal.icon className={`mx-auto mb-2.5 h-5 w-5 ${signal.color}`} />
               <div className="text-2xl font-bold text-foreground">
                 {signal.value}
               </div>

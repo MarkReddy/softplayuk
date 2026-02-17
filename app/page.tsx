@@ -19,9 +19,9 @@ export default function HomePage() {
       <main>
         {/* Hero section */}
         <section className="relative overflow-hidden">
-          <div className="absolute -left-32 top-0 h-80 w-80 rounded-full bg-[hsl(var(--wash-peach))] opacity-50 blur-3xl" />
-          <div className="absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-[hsl(var(--wash-sage))] opacity-40 blur-3xl" />
-          <div className="absolute left-1/2 top-1/3 h-48 w-48 rounded-full bg-[hsl(var(--wash-lavender))] opacity-30 blur-3xl" />
+          <div className="absolute -left-32 top-0 h-80 w-80 rounded-full bg-[hsl(var(--brand-coral))] opacity-20 blur-3xl" />
+          <div className="absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-[hsl(var(--brand-teal))] opacity-20 blur-3xl" />
+          <div className="absolute left-1/2 top-1/3 h-48 w-48 rounded-full bg-[hsl(var(--brand-lavender))] opacity-15 blur-3xl" />
 
           <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-10 px-5 pb-16 pt-16 md:flex-row md:items-center md:pb-20 md:pt-24">
             <div className="flex flex-1 flex-col items-center text-center md:items-start md:text-left">
@@ -48,8 +48,8 @@ export default function HomePage() {
                   fetchPriority="high"
                 />
               </div>
-              <div className="absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-[hsl(var(--wash-clay))]" />
-              <div className="absolute -right-3 -top-3 h-10 w-10 rounded-full bg-[hsl(var(--wash-sage))]" />
+              <div className="absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-[hsl(var(--brand-green))]" />
+              <div className="absolute -right-3 -top-3 h-10 w-10 rounded-full bg-[hsl(var(--brand-coral))]" />
             </div>
           </div>
         </section>
@@ -62,7 +62,7 @@ export default function HomePage() {
         <PopularSearches />
 
         <section className="relative overflow-hidden py-20">
-          <div className="absolute -right-40 top-0 h-72 w-72 rounded-full bg-[hsl(var(--wash-lavender))] opacity-30 blur-3xl" />
+          <div className="absolute -right-40 top-0 h-72 w-72 rounded-full bg-[hsl(var(--brand-lavender))] opacity-15 blur-3xl" />
           <div className="relative mx-auto max-w-2xl px-5 text-center">
             <h2 className="mb-5 text-2xl font-bold text-foreground">
               The UK&apos;s most comprehensive soft play and children&apos;s activity site
