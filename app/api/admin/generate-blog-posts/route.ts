@@ -33,15 +33,63 @@ function delay(ms: number) {
 }
 
 function parseJsonFromText(text: string): Record<string, unknown> | null {
+  // 1. Direct parse
   try { return JSON.parse(text) } catch { /* continue */ }
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (match) {
-    try { return JSON.parse(match[1].trim()) } catch { /* continue */ }
+
+  // 2. Extract from markdown code block
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) {
+    try { return JSON.parse(codeBlockMatch[1].trim()) } catch { /* continue */ }
   }
-  const braceMatch = text.match(/\{[\s\S]*\}/)
-  if (braceMatch) {
-    try { return JSON.parse(braceMatch[0]) } catch { /* continue */ }
+
+  // 3. Extract outermost braces
+  const braceStart = text.indexOf('{')
+  const braceEnd = text.lastIndexOf('}')
+  if (braceStart !== -1 && braceEnd > braceStart) {
+    const jsonCandidate = text.slice(braceStart, braceEnd + 1)
+    try { return JSON.parse(jsonCandidate) } catch { /* continue */ }
+
+    // 4. Fix common LLM JSON issues: unescaped newlines inside string values
+    try {
+      const fixed = jsonCandidate
+        .replace(/:\s*"([\s\S]*?)"\s*([,}])/g, (_match, value, end) => {
+          const escaped = value
+            .replace(/\\/g, '\\\\')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t')
+            .replace(/(?<!\\)"/g, '\\"')
+          return `: "${escaped}"${end}`
+        })
+      return JSON.parse(fixed)
+    } catch { /* continue */ }
+
+    // 5. Last resort: extract key fields manually with regex
+    try {
+      const extract = (key: string): string => {
+        const re = new RegExp(`"${key}"\\s*:\\s*"([\\s\\S]*?)"\\s*[,}]`)
+        const m = jsonCandidate.match(re)
+        return m ? m[1].replace(/\n/g, '\\n').replace(/(?<!\\)"/g, '\\"') : ''
+      }
+      const title = extract('title')
+      const content = extract('content')
+      const excerpt = extract('excerpt')
+      const meta_title = extract('meta_title')
+      const meta_description = extract('meta_description')
+
+      if (content) {
+        // Try to extract faqs array
+        let faqs: Array<{ question: string; answer: string }> = []
+        const faqMatch = jsonCandidate.match(/"faqs"\s*:\s*(\[[\s\S]*?\])\s*[,}]/)
+        if (faqMatch) {
+          try { faqs = JSON.parse(faqMatch[1]) } catch { /* skip faqs */ }
+        }
+
+        return { title, content, excerpt, meta_title, meta_description, faqs }
+      }
+    } catch { /* continue */ }
   }
+
   return null
 }
 
@@ -164,7 +212,8 @@ async function generateAndSavePost(
 
   let post = parseJsonFromText(result.text)
   if (!post || !post.content) {
-    throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}`)
+    console.error(`[v0] Unparseable AI response for ${city}. First 500 chars:`, result.text?.substring(0, 500))
+    throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}. Preview: ${result.text?.substring(0, 150)}`)
   }
 
   let content = post.content as string

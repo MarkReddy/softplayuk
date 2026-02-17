@@ -36,18 +36,45 @@ function getCategoryContext(category: string): string {
 
 /** Safely extract JSON from AI text response */
 function parseJsonFromText(text: string): unknown {
-  // Try direct parse
+  // 1. Direct parse
   try { return JSON.parse(text) } catch {}
-  // Try extracting from markdown code block
+
+  // 2. Extract from markdown code block
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch) {
     try { return JSON.parse(codeBlockMatch[1].trim()) } catch {}
   }
-  // Try extracting first {...} block
-  const braceMatch = text.match(/\{[\s\S]*\}/)
-  if (braceMatch) {
-    try { return JSON.parse(braceMatch[0]) } catch {}
+
+  // 3. Extract outermost braces
+  const braceStart = text.indexOf('{')
+  const braceEnd = text.lastIndexOf('}')
+  if (braceStart !== -1 && braceEnd > braceStart) {
+    const candidate = text.slice(braceStart, braceEnd + 1)
+    try { return JSON.parse(candidate) } catch {}
+
+    // 4. Fix unescaped newlines inside string values
+    try {
+      const fixed = candidate
+        .replace(/:\s*"([\s\S]*?)"\s*([,}])/g, (_m, val, end) => {
+          const escaped = val
+            .replace(/\\/g, '\\\\')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t')
+            .replace(/(?<!\\)"/g, '\\"')
+          return `: "${escaped}"${end}`
+        })
+      return JSON.parse(fixed)
+    } catch {}
   }
+
+  // 5. Try extracting array for review-style responses
+  const arrayStart = text.indexOf('[')
+  const arrayEnd = text.lastIndexOf(']')
+  if (arrayStart !== -1 && arrayEnd > arrayStart) {
+    try { return JSON.parse(text.slice(arrayStart, arrayEnd + 1)) } catch {}
+  }
+
   return null
 }
 
