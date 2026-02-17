@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight, Calendar, Clock, MapPin } from 'lucide-react'
 import { neon } from '@neondatabase/serverless'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
+import { renderMarkdown } from '@/lib/render-markdown'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,20 +48,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
-function renderMarkdown(content: string): string {
-  return content
-    .replace(/^### (.+)$/gm, '<h3 class="mt-8 mb-3 font-serif text-lg font-bold text-foreground">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="mt-10 mb-4 font-serif text-2xl font-bold text-foreground">$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-primary underline hover:no-underline">$1</a>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-muted-foreground">$1</li>')
-    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="my-4 space-y-1">$&</ul>')
-    .replace(/^(?!<[hula])(.*\S.*)$/gm, '<p class="mb-4 leading-relaxed text-muted-foreground">$1</p>')
-}
+// renderMarkdown imported from @/lib/render-markdown
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
+
+  // Redirect guides-* slugs to /guides/ routes
+  if (slug.startsWith('guides-')) {
+    const parts = slug.replace('guides-', '').split('-')
+    // Reconstruct: could be city, city-area, or city-intent
+    const post = await getPost(slug)
+    if (post?.canonical_url) {
+      redirect(post.canonical_url as string)
+    }
+  }
+
   const post = await getPost(slug)
   if (!post) notFound()
 
@@ -68,6 +70,17 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const publishedDate = post.published_at
     ? new Date(post.published_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : null
+
+  const faqs = post.faq_json ? (typeof post.faq_json === 'string' ? JSON.parse(post.faq_json as string) : post.faq_json) : []
+  const faqSchema = Array.isArray(faqs) && faqs.length > 0 ? {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq: { question: string; answer: string }) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+    })),
+  } : null
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -91,10 +104,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     <>
       <SiteHeader />
       <main className="min-h-screen">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        {faqSchema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />}
 
         <nav className="mx-auto max-w-4xl px-4 py-4" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">

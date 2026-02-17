@@ -3,6 +3,14 @@ import { generateText } from 'ai'
 import { createGroq } from '@ai-sdk/groq'
 import { neon } from '@neondatabase/serverless'
 import { requireAdmin } from '@/lib/admin-auth'
+import {
+  buildCityGuidePrompt,
+  buildAreaGuidePrompt,
+  buildIntentPagePrompt,
+  INTENT_TYPES,
+  type IntentType,
+  type VenueData,
+} from '@/lib/blog-prompts'
 
 const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
@@ -19,16 +27,12 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-// Parse JSON from AI response text -- handles markdown code blocks
-function parseJsonFromText(text: string): Record<string, string> | null {
-  // Try direct parse
+function parseJsonFromText(text: string): Record<string, unknown> | null {
   try { return JSON.parse(text) } catch { /* continue */ }
-  // Try extracting from ```json ... ``` blocks
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (match) {
     try { return JSON.parse(match[1].trim()) } catch { /* continue */ }
   }
-  // Try finding first { ... } block
   const braceMatch = text.match(/\{[\s\S]*\}/)
   if (braceMatch) {
     try { return JSON.parse(braceMatch[0]) } catch { /* continue */ }
@@ -36,7 +40,199 @@ function parseJsonFromText(text: string): Record<string, string> | null {
   return null
 }
 
-// GET: List blog posts and stats
+async function fetchVenuesForCity(city: string, limit = 10): Promise<VenueData[]> {
+  const rows = await sql`
+    SELECT name, slug, category, google_rating, description, city, county,
+           has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+           price_range, age_range
+    FROM venues
+    WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+    ORDER BY google_rating DESC NULLS LAST
+    LIMIT ${limit}
+  `
+  return rows as unknown as VenueData[]
+}
+
+async function fetchVenuesForArea(city: string, area: string, limit = 8): Promise<VenueData[]> {
+  // Area may map to county or a neighbourhood within the city
+  const rows = await sql`
+    SELECT name, slug, category, google_rating, description, city, county,
+           has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+           price_range, age_range
+    FROM venues
+    WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+    ORDER BY google_rating DESC NULLS LAST
+    LIMIT ${limit}
+  `
+  return rows as unknown as VenueData[]
+}
+
+async function fetchVenuesForIntent(city: string, intent: IntentType, limit = 8): Promise<VenueData[]> {
+  // Filter by relevant features depending on intent
+  let rows
+  switch (intent) {
+    case 'birthday-parties':
+      rows = await sql`
+        SELECT name, slug, category, google_rating, description, city, county,
+               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+               price_range, age_range
+        FROM venues
+        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+        ORDER BY has_party_rooms DESC, google_rating DESC NULLS LAST
+        LIMIT ${limit}
+      `
+      break
+    case 'toddler-soft-play':
+      rows = await sql`
+        SELECT name, slug, category, google_rating, description, city, county,
+               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+               price_range, age_range
+        FROM venues
+        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+        ORDER BY has_baby_area DESC, google_rating DESC NULLS LAST
+        LIMIT ${limit}
+      `
+      break
+    case 'sen-friendly':
+      rows = await sql`
+        SELECT name, slug, category, google_rating, description, city, county,
+               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+               price_range, age_range
+        FROM venues
+        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+        ORDER BY is_sen_friendly DESC, google_rating DESC NULLS LAST
+        LIMIT ${limit}
+      `
+      break
+    default:
+      rows = await sql`
+        SELECT name, slug, category, google_rating, description, city, county,
+               has_party_rooms, is_sen_friendly, has_baby_area, has_cafe, has_parking,
+               price_range, age_range
+        FROM venues
+        WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+        ORDER BY google_rating DESC NULLS LAST
+        LIMIT ${limit}
+      `
+  }
+  return rows as unknown as VenueData[]
+}
+
+async function getNearbyCities(city: string, limit = 3): Promise<string[]> {
+  const rows = await sql`
+    SELECT city, COUNT(*) as cnt
+    FROM venues
+    WHERE status = 'active' AND LOWER(city) != LOWER(${city}) AND city IS NOT NULL AND city != ''
+    GROUP BY city
+    ORDER BY cnt DESC
+    LIMIT ${limit}
+  `
+  return rows.map(r => r.city as string)
+}
+
+async function getAreasForCity(city: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT DISTINCT county
+    FROM venues
+    WHERE status = 'active' AND LOWER(city) = LOWER(${city}) AND county IS NOT NULL AND county != ''
+  `
+  return rows.map(r => r.county as string)
+}
+
+function buildSlug(contentType: string, city: string, area?: string, intent?: string): string {
+  const citySlug = slugify(city)
+  switch (contentType) {
+    case 'city':
+      return `guides-${citySlug}`
+    case 'area':
+      return `guides-${citySlug}-${slugify(area || '')}`
+    case 'intent':
+      return `guides-${citySlug}-${intent || ''}`
+    default:
+      return `guides-${citySlug}`
+  }
+}
+
+function buildCanonicalUrl(contentType: string, city: string, area?: string, intent?: string): string {
+  const citySlug = slugify(city)
+  switch (contentType) {
+    case 'city':
+      return `/guides/${citySlug}`
+    case 'area':
+      return `/guides/${citySlug}/${slugify(area || '')}`
+    case 'intent':
+      return `/guides/${citySlug}/${intent || ''}`
+    default:
+      return `/guides/${citySlug}`
+  }
+}
+
+async function generateAndSavePost(
+  contentType: string,
+  prompt: string,
+  city: string,
+  county: string,
+  autoPublish: boolean,
+  area?: string,
+  intent?: string,
+  faqsFromAI?: Array<{ question: string; answer: string }>,
+) {
+  const result = await generateText({
+    model: groq('llama-3.3-70b-versatile'),
+    prompt,
+  })
+
+  const post = parseJsonFromText(result.text)
+  if (!post || !post.content) {
+    throw new Error(`AI returned unparseable content. Raw text length: ${result.text?.length || 0}`)
+  }
+
+  const content = post.content as string
+  const wordCount = content.split(/\s+/).length
+  const minWords = contentType === 'area' ? 800 : 1000
+
+  if (wordCount < minWords) {
+    throw new Error(`Content too short: ${wordCount} words (minimum ${minWords})`)
+  }
+
+  const faqs = (post.faqs as Array<{ question: string; answer: string }>) || faqsFromAI || []
+  const slug = buildSlug(contentType, city, area, intent)
+  const canonicalUrl = buildCanonicalUrl(contentType, city, area, intent)
+  const status = autoPublish ? 'published' : 'draft'
+  const category = contentType === 'city' ? 'city-guide' : contentType === 'area' ? 'area-guide' : 'intent-guide'
+
+  await sql`
+    INSERT INTO blog_posts (
+      slug, title, content, excerpt, category, content_type, region, city, area, intent,
+      meta_title, meta_description, og_title, og_description, canonical_url,
+      faq_json, word_count, status, published_at
+    ) VALUES (
+      ${slug},
+      ${(post.title as string) || ''},
+      ${content},
+      ${(post.excerpt as string) || ''},
+      ${category},
+      ${contentType},
+      ${county},
+      ${city},
+      ${area || null},
+      ${intent || null},
+      ${(post.meta_title as string) || (post.title as string) || ''},
+      ${(post.meta_description as string) || ''},
+      ${(post.og_title as string) || (post.meta_title as string) || ''},
+      ${(post.og_description as string) || (post.meta_description as string) || ''},
+      ${canonicalUrl},
+      ${JSON.stringify(faqs)},
+      ${wordCount},
+      ${status},
+      ${autoPublish ? new Date().toISOString() : null}
+    )
+  `
+
+  return { title: post.title as string, wordCount, slug }
+}
+
+// ─── GET: List blog posts and stats ─────────────────────────
 export async function GET(request: Request) {
   const authError = requireAdmin(request)
   if (authError) return authError
@@ -44,30 +240,47 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const status = url.searchParams.get('status') || 'all'
+    const contentType = url.searchParams.get('contentType')
 
     let posts
-    if (status === 'all') {
-      posts = await sql`SELECT id, slug, title, excerpt, category, region, city, word_count, status, published_at, created_at FROM blog_posts ORDER BY created_at DESC LIMIT 200`
+    if (contentType && contentType !== 'all') {
+      posts = status === 'all'
+        ? await sql`SELECT id, slug, title, excerpt, category, content_type, region, city, area, intent, word_count, status, published_at, created_at FROM blog_posts WHERE content_type = ${contentType} ORDER BY created_at DESC LIMIT 200`
+        : await sql`SELECT id, slug, title, excerpt, category, content_type, region, city, area, intent, word_count, status, published_at, created_at FROM blog_posts WHERE status = ${status} AND content_type = ${contentType} ORDER BY created_at DESC LIMIT 200`
     } else {
-      posts = await sql`SELECT id, slug, title, excerpt, category, region, city, word_count, status, published_at, created_at FROM blog_posts WHERE status = ${status} ORDER BY created_at DESC LIMIT 200`
+      posts = status === 'all'
+        ? await sql`SELECT id, slug, title, excerpt, category, content_type, region, city, area, intent, word_count, status, published_at, created_at FROM blog_posts ORDER BY created_at DESC LIMIT 200`
+        : await sql`SELECT id, slug, title, excerpt, category, content_type, region, city, area, intent, word_count, status, published_at, created_at FROM blog_posts WHERE status = ${status} ORDER BY created_at DESC LIMIT 200`
     }
 
     const [stats] = await sql`
       SELECT
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'published' THEN 1 END) as published,
-        COUNT(CASE WHEN status = 'draft' THEN 1 END) as drafts
+        COUNT(CASE WHEN status = 'draft' THEN 1 END) as drafts,
+        COUNT(CASE WHEN content_type = 'city' THEN 1 END) as city_guides,
+        COUNT(CASE WHEN content_type = 'area' THEN 1 END) as area_guides,
+        COUNT(CASE WHEN content_type = 'intent' THEN 1 END) as intent_pages
       FROM blog_posts
     `
 
-    return NextResponse.json({ posts, stats: { total: Number(stats.total), published: Number(stats.published), drafts: Number(stats.drafts) } })
+    return NextResponse.json({
+      posts,
+      stats: {
+        total: Number(stats.total),
+        published: Number(stats.published),
+        drafts: Number(stats.drafts),
+        cityGuides: Number(stats.city_guides),
+        areaGuides: Number(stats.area_guides),
+        intentPages: Number(stats.intent_pages),
+      },
+    })
   } catch (err) {
-    console.error('[v0] Blog GET error:', err)
     return NextResponse.json({ error: 'Failed to fetch blog posts', detail: err instanceof Error ? err.message : String(err) }, { status: 500 })
   }
 }
 
-// POST: Generate blog posts
+// ─── POST: Generate / manage blog posts ─────────────────────
 export async function POST(request: Request) {
   const authError = requireAdmin(request)
   if (authError) return authError
@@ -76,32 +289,183 @@ export async function POST(request: Request) {
   try { body = await request.json() } catch { body = {} }
 
   const action = (body.action as string) || 'generate_city'
-  console.log(`[v0] Blog POST received - action: ${action}, city: ${body.city || 'none'}, region: ${body.region || 'none'}`)
   const city = body.city as string | undefined
   const region = body.region as string | undefined
+  const area = body.area as string | undefined
+  const intent = body.intent as string | undefined
   const postId = body.postId ? Number(body.postId) : null
   const autoPublish = body.autoPublish === true
 
   try {
-    // Publish a draft post
+    // ─── Publish / Unpublish / Delete ──────────
     if (action === 'publish' && postId) {
       await sql`UPDATE blog_posts SET status = 'published', published_at = NOW(), updated_at = NOW() WHERE id = ${postId}`
       return NextResponse.json({ success: true, message: 'Post published' })
     }
-
-    // Unpublish
     if (action === 'unpublish' && postId) {
       await sql`UPDATE blog_posts SET status = 'draft', published_at = NULL, updated_at = NOW() WHERE id = ${postId}`
       return NextResponse.json({ success: true, message: 'Post unpublished' })
     }
-
-    // Delete
     if (action === 'delete' && postId) {
       await sql`DELETE FROM blog_posts WHERE id = ${postId}`
       return NextResponse.json({ success: true, message: 'Post deleted' })
     }
 
-    // Bulk generate for all cities with 3+ venues
+    // ─── Generate City Guide ────────────────────
+    if (action === 'generate_city' && city) {
+      const [venueStats] = await sql`
+        SELECT COUNT(*) as cnt, MAX(county) as county
+        FROM venues WHERE status = 'active' AND LOWER(city) = LOWER(${city})
+      `
+      if (Number(venueStats.cnt) === 0) {
+        return NextResponse.json({ success: false, message: `No active venues found in "${city}".` })
+      }
+
+      const slug = buildSlug('city', city)
+      const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
+      if (existing.length > 0) {
+        return NextResponse.json({ success: false, message: `City guide for ${city} already exists` })
+      }
+
+      const venues = await fetchVenuesForCity(city, 10)
+      const nearbyCities = await getNearbyCities(city, 3)
+      const areas = await getAreasForCity(city)
+      const county = (venueStats.county as string) || ''
+
+      const prompt = buildCityGuidePrompt(city, county, Number(venueStats.cnt), venues, areas, nearbyCities)
+      const result = await generateAndSavePost('city', prompt, city, county, autoPublish)
+
+      return NextResponse.json({
+        success: true,
+        message: `City guide generated for ${city}: "${result.title}" (${result.wordCount} words)`,
+      })
+    }
+
+    // ─── Generate Area Guide ────────────────────
+    if (action === 'generate_area' && city && area) {
+      const slug = buildSlug('area', city, area)
+      const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
+      if (existing.length > 0) {
+        return NextResponse.json({ success: false, message: `Area guide for ${area}, ${city} already exists` })
+      }
+
+      const venues = await fetchVenuesForArea(city, area, 8)
+      if (venues.length === 0) {
+        return NextResponse.json({ success: false, message: `No venues found for ${area}, ${city}` })
+      }
+
+      const nearbyCities = await getNearbyCities(city, 3)
+      const county = venues[0]?.county || ''
+
+      const prompt = buildAreaGuidePrompt(area, city, venues, nearbyCities)
+      const result = await generateAndSavePost('area', prompt, city, county, autoPublish, area)
+
+      return NextResponse.json({
+        success: true,
+        message: `Area guide generated for ${area}, ${city}: "${result.title}" (${result.wordCount} words)`,
+      })
+    }
+
+    // ─── Generate Intent Page ───────────────────
+    if (action === 'generate_intent' && city && intent) {
+      if (!(intent in INTENT_TYPES)) {
+        return NextResponse.json({ success: false, message: `Invalid intent type: "${intent}". Valid: ${Object.keys(INTENT_TYPES).join(', ')}` })
+      }
+
+      const slug = buildSlug('intent', city, undefined, intent)
+      const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
+      if (existing.length > 0) {
+        return NextResponse.json({ success: false, message: `Intent page for "${intent}" in ${city} already exists` })
+      }
+
+      const venues = await fetchVenuesForIntent(city, intent as IntentType, 8)
+      if (venues.length === 0) {
+        return NextResponse.json({ success: false, message: `No venues found in ${city}` })
+      }
+
+      const nearbyCities = await getNearbyCities(city, 3)
+      const county = venues[0]?.county || ''
+
+      const prompt = buildIntentPagePrompt(intent as IntentType, city, venues, nearbyCities)
+      const result = await generateAndSavePost('intent', prompt, city, county, autoPublish, undefined, intent)
+
+      return NextResponse.json({
+        success: true,
+        message: `Intent page generated: "${result.title}" (${result.wordCount} words)`,
+      })
+    }
+
+    // ─── Generate Region Guide ──────────────────
+    if (action === 'generate_region' && region) {
+      const [venueStats] = await sql`
+        SELECT COUNT(*) as cnt
+        FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region})
+      `
+      if (Number(venueStats.cnt) === 0) {
+        return NextResponse.json({ success: false, message: `No active venues found in "${region}".` })
+      }
+
+      const slug = `soft-play-centres-in-${slugify(region)}`
+      const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
+      if (existing.length > 0) {
+        return NextResponse.json({ success: false, message: `Region guide for ${region} already exists` })
+      }
+
+      // Build a region-specific prompt
+      const topCities = await sql`
+        SELECT city, COUNT(*) as cnt
+        FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region}) AND city IS NOT NULL AND city != ''
+        GROUP BY city ORDER BY cnt DESC LIMIT 8
+      `
+      const cityList = topCities.map((c, i) => `${i + 1}. ${c.city} (${c.cnt} venues)`).join('\n')
+
+      const prompt = `Write a comprehensive, SEO-optimised region guide titled "Soft Play Centres in ${region}" for Softplay UK.
+
+TARGET WORD COUNT: 1,200--1,800 words. Write in British English.
+
+STRUCTURE:
+## Introduction: Family activities in ${region}, ${Number(venueStats.cnt)} venues across the region
+## Top Areas to Visit: Reference these cities:\n${cityList}
+## What to Expect: Regional overview of play options
+## FAQs: 5--7 questions about soft play in ${region}
+## Closing: CTA to explore the region, link to city guides
+
+QUALITY: Warm, helpful parent tone. No fluff, no fake stats.
+
+Respond with ONLY valid JSON: {"title":"...","content":"... markdown ...","meta_title":"...","meta_description":"...","og_title":"...","og_description":"...","excerpt":"...","faqs":[{"question":"...","answer":"..."}]}`
+
+      const result = await generateText({ model: groq('llama-3.3-70b-versatile'), prompt })
+      const post = parseJsonFromText(result.text)
+      if (!post || !post.content) throw new Error('AI returned unparseable content')
+
+      const content = post.content as string
+      const wordCount = content.split(/\s+/).length
+      const faqs = (post.faqs as Array<{ question: string; answer: string }>) || []
+      const status = autoPublish ? 'published' : 'draft'
+
+      await sql`
+        INSERT INTO blog_posts (
+          slug, title, content, excerpt, category, content_type, region, city,
+          meta_title, meta_description, og_title, og_description, canonical_url,
+          faq_json, word_count, status, published_at
+        ) VALUES (
+          ${slug}, ${(post.title as string) || ''}, ${content}, ${(post.excerpt as string) || ''},
+          ${'region-guide'}, ${'region'}, ${region}, ${null},
+          ${(post.meta_title as string) || ''}, ${(post.meta_description as string) || ''},
+          ${(post.og_title as string) || ''}, ${(post.og_description as string) || ''},
+          ${`/blog/post/${slug}`},
+          ${JSON.stringify(faqs)}, ${wordCount}, ${status},
+          ${autoPublish ? new Date().toISOString() : null}
+        )
+      `
+
+      return NextResponse.json({
+        success: true,
+        message: `Region guide generated for ${region}: ${wordCount} words`,
+      })
+    }
+
+    // ─── Bulk Generate City Guides ──────────────
     if (action === 'bulk_generate') {
       const cities = await sql`
         SELECT city, county, COUNT(*) as cnt
@@ -109,10 +473,9 @@ export async function POST(request: Request) {
         GROUP BY city, county HAVING COUNT(*) >= 3
         ORDER BY COUNT(*) DESC LIMIT 50
       `
-      console.log(`[v0] Bulk generate: found ${cities.length} cities with 3+ venues`)
 
       if (cities.length === 0) {
-        return NextResponse.json({ success: false, message: 'No cities found with 3+ active venues', generated: 0, skipped: 0, errors: [] })
+        return NextResponse.json({ success: false, message: 'No cities with 3+ venues found', generated: 0, skipped: 0, errors: [] })
       }
 
       let generated = 0
@@ -121,22 +484,25 @@ export async function POST(request: Request) {
 
       for (const c of cities) {
         const cityName = c.city as string
-        const citySlug = `best-soft-play-in-${slugify(cityName)}`
-        const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${citySlug}`
+        const slug = buildSlug('city', cityName)
+        const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
         if (existing.length > 0) { skipped++; continue }
 
         try {
-          await generateCityPost(cityName, c.county as string, Number(c.cnt), autoPublish)
+          const venues = await fetchVenuesForCity(cityName, 10)
+          const nearbyCities = await getNearbyCities(cityName, 3)
+          const areas = await getAreasForCity(cityName)
+          const county = (c.county as string) || ''
+
+          const prompt = buildCityGuidePrompt(cityName, county, Number(c.cnt), venues, areas, nearbyCities)
+          await generateAndSavePost('city', prompt, cityName, county, autoPublish)
           generated++
-          console.log(`[v0] Bulk: generated post for ${cityName} (${generated} done)`)
-          // Rate limiting - wait 2s between AI calls to avoid hitting limits
-          if (generated < cities.length) await delay(2000)
+          if (generated < cities.length) await delay(2500)
         } catch (err) {
-          const errMsg = `${cityName}: ${err instanceof Error ? err.message : String(err)}`
-          console.error(`[v0] Blog gen error - ${errMsg}`)
-          errors.push(errMsg)
+          errors.push(`${cityName}: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
+
       return NextResponse.json({
         success: generated > 0,
         generated,
@@ -147,211 +513,47 @@ export async function POST(request: Request) {
       })
     }
 
-    // Generate for specific city
-    if (action === 'generate_city' && city) {
-      const [venueStats] = await sql`
-        SELECT COUNT(*) as cnt, MAX(county) as county
-        FROM venues WHERE status = 'active' AND LOWER(city) = LOWER(${city})
-      `
-      console.log(`[v0] City generate: ${city} has ${venueStats.cnt} venues`)
-      if (Number(venueStats.cnt) === 0) {
-        return NextResponse.json({ success: false, message: `No active venues found in "${city}". Check the city name matches your database.` })
+    // ─── Bulk Generate Intent Pages for a City ──
+    if (action === 'bulk_generate_intent' && city) {
+      const intents = Object.keys(INTENT_TYPES) as IntentType[]
+      let generated = 0
+      let skipped = 0
+      const errors: string[] = []
+
+      for (const intentKey of intents) {
+        const slug = buildSlug('intent', city, undefined, intentKey)
+        const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
+        if (existing.length > 0) { skipped++; continue }
+
+        try {
+          const venues = await fetchVenuesForIntent(city, intentKey, 8)
+          if (venues.length === 0) { skipped++; continue }
+
+          const nearbyCities = await getNearbyCities(city, 3)
+          const county = venues[0]?.county || ''
+          const prompt = buildIntentPagePrompt(intentKey, city, venues, nearbyCities)
+          await generateAndSavePost('intent', prompt, city, county, autoPublish, undefined, intentKey)
+          generated++
+          if (generated < intents.length) await delay(2500)
+        } catch (err) {
+          errors.push(`${intentKey}: ${err instanceof Error ? err.message : String(err)}`)
+        }
       }
 
-      const slug = `best-soft-play-in-${slugify(city)}`
-      const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
-      if (existing.length > 0) {
-        return NextResponse.json({ success: false, message: `Blog post for ${city} already exists` })
-      }
-
-      await generateCityPost(city, venueStats.county as string || '', Number(venueStats.cnt), autoPublish)
-      return NextResponse.json({ success: true, message: `Blog post generated for ${city}` })
-    }
-
-    // Generate for specific region
-    if (action === 'generate_region' && region) {
-      const [venueStats] = await sql`
-        SELECT COUNT(*) as cnt
-        FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region})
-      `
-      console.log(`[v0] Region generate: ${region} has ${venueStats.cnt} venues`)
-      if (Number(venueStats.cnt) === 0) {
-        return NextResponse.json({ success: false, message: `No active venues found in "${region}". Check the region name matches your database.` })
-      }
-
-      const slug = `soft-play-centres-in-${slugify(region)}`
-      const existing = await sql`SELECT id FROM blog_posts WHERE slug = ${slug}`
-      if (existing.length > 0) {
-        return NextResponse.json({ success: false, message: `Blog post for ${region} already exists` })
-      }
-
-      await generateRegionPost(region, Number(venueStats.cnt), autoPublish)
-      return NextResponse.json({ success: true, message: `Blog post generated for ${region}` })
+      return NextResponse.json({
+        success: generated > 0,
+        generated,
+        skipped,
+        errors,
+        message: `Generated ${generated} intent pages for ${city}, skipped ${skipped}${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
+      })
     }
 
     return NextResponse.json({ error: 'Invalid action or missing parameters' }, { status: 400 })
   } catch (err) {
-    console.error('[v0] Blog POST error:', err)
     return NextResponse.json({
       success: false,
       message: `Error: ${err instanceof Error ? err.message : String(err)}`,
     }, { status: 500 })
-  }
-}
-
-async function generateCityPost(city: string, county: string, venueCount: number, autoPublish: boolean) {
-  console.log(`[v0] generateCityPost starting for: ${city}`)
-  
-  const topVenues = await sql`
-    SELECT name, slug, google_rating, category, description
-    FROM venues WHERE status = 'active' AND LOWER(city) = LOWER(${city})
-    ORDER BY google_rating DESC NULLS LAST LIMIT 8
-  `
-  console.log(`[v0] Found ${topVenues.length} top venues for ${city}`)
-
-  const venueList = topVenues.map((v, i) =>
-    `${i + 1}. ${v.name} (${v.category || 'play venue'}${v.google_rating ? `, rated ${v.google_rating}/5` : ''})`
-  ).join('\n')
-
-  const prompt = `Write a comprehensive, SEO-optimised blog article titled "Best Soft Play Centres in ${city}" for a UK parenting website called SoftPlay UK.
-
-Requirements:
-- MINIMUM 550 words (aim for 600-700 words)
-- Write in British English (e.g. "centres" not "centers", "colour" not "color")
-- Include an engaging introduction about why ${city} is great for families
-- Create H2 sections for: overview of play options, top venues to visit, tips for parents, and a conclusion
-- Naturally mention ${venueCount} venues are listed in ${city}${county ? ` in ${county}` : ''}
-- Reference these specific venues by name (use their exact names): 
-${venueList}
-- Include practical tips for parents visiting soft play centres
-- End with a call to action encouraging readers to browse all venues in ${city}
-- Tone: warm, helpful, authoritative -- like a trusted local parent
-- Do NOT include the title in the body content
-- Use markdown formatting with ## for headings
-
-You MUST respond with ONLY a valid JSON object (no markdown code blocks, no extra text) with these exact fields:
-{
-  "title": "the article title",
-  "content": "the full article body in markdown",
-  "meta_title": "SEO meta title (max 60 chars)",
-  "meta_description": "meta description (max 155 chars)",
-  "excerpt": "short excerpt (max 200 chars)"
-}`
-
-  console.log(`[v0] Calling generateText for ${city}...`)
-  let result
-  try {
-    result = await generateText({
-      model: groq('llama-3.3-70b-versatile'),
-      prompt,
-    })
-    console.log(`[v0] generateText completed for ${city}. Text length: ${result.text?.length || 0}`)
-  } catch (aiError) {
-    console.error(`[v0] generateText FAILED for ${city}:`, aiError)
-    throw new Error(`AI generation failed for ${city}: ${aiError instanceof Error ? aiError.message : String(aiError)}`)
-  }
-
-  const post = parseJsonFromText(result.text)
-  if (!post || !post.content) {
-    console.error(`[v0] Failed to parse JSON for ${city}. Text preview: ${result.text?.substring(0, 300)}`)
-    throw new Error(`AI returned unparseable content for ${city}. Raw text length: ${result.text?.length || 0}`)
-  }
-
-  const wordCount = post.content.split(/\s+/).length
-  console.log(`[v0] Post for ${city}: "${post.title}" - ${wordCount} words`)
-  if (wordCount < 100) {
-    throw new Error(`AI content too short for ${city}: only ${wordCount} words`)
-  }
-
-  const slug = `best-soft-play-in-${slugify(city)}`
-  const status = autoPublish ? 'published' : 'draft'
-
-  try {
-    await sql`
-      INSERT INTO blog_posts (slug, title, content, excerpt, category, region, city, meta_title, meta_description, word_count, status, published_at)
-      VALUES (${slug}, ${post.title}, ${post.content}, ${post.excerpt || ''}, ${'city-guide'}, ${county}, ${city}, ${post.meta_title || post.title}, ${post.meta_description || ''}, ${wordCount}, ${status}, ${autoPublish ? new Date().toISOString() : null})
-    `
-    console.log(`[v0] Inserted blog post for ${city} with slug: ${slug}`)
-  } catch (dbError) {
-    console.error(`[v0] DB insert FAILED for ${city}:`, dbError)
-    throw new Error(`Database insert failed for ${city}: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
-  }
-}
-
-async function generateRegionPost(region: string, venueCount: number, autoPublish: boolean) {
-  console.log(`[v0] generateRegionPost starting for: ${region}`)
-
-  const topCities = await sql`
-    SELECT city, COUNT(*) as cnt
-    FROM venues WHERE status = 'active' AND LOWER(county) = LOWER(${region}) AND city IS NOT NULL AND city != ''
-    GROUP BY city ORDER BY cnt DESC LIMIT 8
-  `
-
-  const cityList = topCities.map((c, i) =>
-    `${i + 1}. ${c.city} (${c.cnt} venues)`
-  ).join('\n')
-
-  const prompt = `Write a comprehensive, SEO-optimised blog article titled "Soft Play Centres in ${region}" for a UK parenting website called SoftPlay UK.
-
-Requirements:
-- MINIMUM 550 words (aim for 600-700 words)
-- Write in British English (e.g. "centres" not "centers")
-- Include an engaging intro about family activities in ${region}
-- Create H2 sections for: regional overview, top areas to visit, what to expect, and a conclusion
-- Mention that SoftPlay UK lists ${venueCount} venues across ${region}
-- Reference these cities/towns and their venue counts:
-${cityList}
-- Include practical tips for families
-- End with a call to action encouraging readers to explore the region
-- Tone: warm, helpful, authoritative
-- Do NOT include the title in the body content
-- Use markdown formatting with ## for headings
-
-You MUST respond with ONLY a valid JSON object (no markdown code blocks, no extra text) with these exact fields:
-{
-  "title": "the article title",
-  "content": "the full article body in markdown",
-  "meta_title": "SEO meta title (max 60 chars)",
-  "meta_description": "meta description (max 155 chars)",
-  "excerpt": "short excerpt (max 200 chars)"
-}`
-
-  console.log(`[v0] Calling generateText for region ${region}...`)
-  let result
-  try {
-    result = await generateText({
-      model: groq('llama-3.3-70b-versatile'),
-      prompt,
-    })
-    console.log(`[v0] generateText completed for ${region}. Text length: ${result.text?.length || 0}`)
-  } catch (aiError) {
-    console.error(`[v0] generateText FAILED for ${region}:`, aiError)
-    throw new Error(`AI generation failed for ${region}: ${aiError instanceof Error ? aiError.message : String(aiError)}`)
-  }
-
-  const post = parseJsonFromText(result.text)
-  if (!post || !post.content) {
-    console.error(`[v0] Failed to parse JSON for ${region}. Text preview: ${result.text?.substring(0, 300)}`)
-    throw new Error(`AI returned unparseable content for ${region}. Raw text length: ${result.text?.length || 0}`)
-  }
-
-  const wordCount = post.content.split(/\s+/).length
-  console.log(`[v0] Post for ${region}: "${post.title}" - ${wordCount} words`)
-  if (wordCount < 100) {
-    throw new Error(`AI content too short for ${region}: only ${wordCount} words`)
-  }
-
-  const slug = `soft-play-centres-in-${slugify(region)}`
-  const status = autoPublish ? 'published' : 'draft'
-
-  try {
-    await sql`
-      INSERT INTO blog_posts (slug, title, content, excerpt, category, region, city, meta_title, meta_description, word_count, status, published_at)
-      VALUES (${slug}, ${post.title}, ${post.content}, ${post.excerpt || ''}, ${'region-guide'}, ${region}, ${null}, ${post.meta_title || post.title}, ${post.meta_description || ''}, ${wordCount}, ${status}, ${autoPublish ? new Date().toISOString() : null})
-    `
-    console.log(`[v0] Inserted blog post for ${region} with slug: ${slug}`)
-  } catch (dbError) {
-    console.error(`[v0] DB insert FAILED for ${region}:`, dbError)
-    throw new Error(`Database insert failed for ${region}: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
   }
 }
