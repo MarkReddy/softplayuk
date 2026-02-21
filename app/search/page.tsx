@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   title: 'Search Soft Play Centres',
   description:
     'Search for soft play centres near you by postcode. Filter by age, price, facilities, and real parent reviews.',
+  alternates: {
+    canonical: '/search',
+  },
 }
 
 export default function SearchPage() {

@@ -10,6 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { X } from 'lucide-react'
 import useSWR from 'swr'
+import { trackFilterChange } from '@/lib/analytics'
 
 interface RegionResult {
   region: string
@@ -62,7 +63,7 @@ export function SearchFilters({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={sortBy} onValueChange={onSortChange}>
+        <Select value={sortBy} onValueChange={(v) => { trackFilterChange('sort', v); onSortChange(v) }}>
           <SelectTrigger className="w-[170px] rounded-xl bg-card">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
@@ -74,7 +75,7 @@ export function SearchFilters({
           </SelectContent>
         </Select>
 
-        <Select value={radius} onValueChange={onRadiusChange}>
+        <Select value={radius} onValueChange={(v) => { trackFilterChange('radius', v); onRadiusChange(v) }}>
           <SelectTrigger className="w-[150px] rounded-xl bg-card">
             <SelectValue placeholder="Radius" />
           </SelectTrigger>
@@ -87,7 +88,7 @@ export function SearchFilters({
           </SelectContent>
         </Select>
 
-        <Select value={region} onValueChange={onRegionChange}>
+        <Select value={region} onValueChange={(v) => { trackFilterChange('region', v); onRegionChange(v) }}>
           <SelectTrigger className="w-[180px] rounded-xl bg-card">
             <SelectValue placeholder="Region" />
           </SelectTrigger>
@@ -101,7 +102,7 @@ export function SearchFilters({
           </SelectContent>
         </Select>
 
-        <Select value={ageGroup} onValueChange={onAgeChange}>
+        <Select value={ageGroup} onValueChange={(v) => { trackFilterChange('age_group', v); onAgeChange(v) }}>
           <SelectTrigger className="w-[140px] rounded-xl bg-card">
             <SelectValue placeholder="Age group" />
           </SelectTrigger>
@@ -114,7 +115,7 @@ export function SearchFilters({
           </SelectContent>
         </Select>
 
-        <Select value={priceBand} onValueChange={onPriceChange}>
+        <Select value={priceBand} onValueChange={(v) => { trackFilterChange('price', v); onPriceChange(v) }}>
           <SelectTrigger className="w-[130px] rounded-xl bg-card">
             <SelectValue placeholder="Price" />
           </SelectTrigger>
@@ -127,7 +128,7 @@ export function SearchFilters({
         </Select>
 
         <button
-          onClick={onSenToggle}
+          onClick={() => { trackFilterChange('sen_friendly', String(!senOnly)); onSenToggle() }}
           className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
             senOnly
               ? 'border-primary bg-primary/10 font-medium text-primary'

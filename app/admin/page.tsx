@@ -3,7 +3,7 @@
 import { AdminAuthProvider, useAdminAuth } from '@/components/admin-auth-provider'
 import { AdminLogin } from '@/components/admin/admin-login'
 import Link from 'next/link'
-import { Database, FileText, Sparkles, FlaskConical } from 'lucide-react'
+import { Database, FileText, Sparkles, FlaskConical, Activity } from 'lucide-react'
 
 export default function AdminPage() {
   return (
@@ -37,6 +37,12 @@ const tools = [
     icon: FlaskConical,
     title: 'API Tests',
     description: 'Test API endpoints and check integration health.',
+  },
+  {
+    href: '/admin/tracking-test',
+    icon: Activity,
+    title: 'GA4 Tracking Test',
+    description: 'Fire test events, check GA detection status, and validate analytics tracking.',
   },
 ]
 

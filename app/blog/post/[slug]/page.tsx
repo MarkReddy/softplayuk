@@ -36,13 +36,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const post = await getPost(slug)
   if (!post) return { title: 'Post Not Found' }
 
+  const canonical = (post.canonical_url as string) || `/blog/post/${slug}`
+
   return {
     title: (post.meta_title as string) || (post.title as string),
     description: (post.meta_description as string) || (post.excerpt as string),
+    alternates: {
+      canonical,
+    },
     openGraph: {
       title: (post.meta_title as string) || (post.title as string),
       description: (post.meta_description as string) || (post.excerpt as string),
       type: 'article',
+      url: canonical,
       publishedTime: post.published_at as string,
     },
   }

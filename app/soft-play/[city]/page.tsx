@@ -22,9 +22,13 @@ export async function generateMetadata({
   return {
     title: `Soft Play Centres in ${page.city} - Best Indoor Play Areas`,
     description: page.description,
+    alternates: {
+      canonical: `/soft-play/${city}`,
+    },
     openGraph: {
       title: `Soft Play Centres in ${page.city}`,
       description: page.description,
+      url: `/soft-play/${city}`,
     },
   }
 }
