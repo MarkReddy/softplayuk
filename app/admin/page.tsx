@@ -3,7 +3,7 @@
 import { AdminAuthProvider, useAdminAuth } from '@/components/admin-auth-provider'
 import { AdminLogin } from '@/components/admin/admin-login'
 import Link from 'next/link'
-import { Database, FileText, Sparkles, FlaskConical, Activity } from 'lucide-react'
+import { Database, FileText, Sparkles, FlaskConical, Activity, Wand2 } from 'lucide-react'
 
 export default function AdminPage() {
   return (
@@ -25,6 +25,12 @@ const tools = [
     icon: Sparkles,
     title: 'Generate Content',
     description: 'Use AI to generate venue descriptions, facilities, and parent reviews in bulk.',
+  },
+  {
+    href: '/admin/enrich',
+    icon: Wand2,
+    title: 'Venue Enrichment',
+    description: 'Bulk AI enrichment: descriptions, facilities, hours, and 9-11 reviews per venue via Groq.',
   },
   {
     href: '/admin/blog',
