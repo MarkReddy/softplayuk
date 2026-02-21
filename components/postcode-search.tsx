@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Loader2 } from 'lucide-react'
 import { isValidUKPostcode } from '@/lib/data'
+import { trackPostcodeSearch } from '@/lib/analytics'
 
 export function PostcodeSearch({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
   const [postcode, setPostcode] = useState('')
@@ -39,6 +40,7 @@ export function PostcodeSearch({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
         return
       }
 
+      trackPostcodeSearch(data.postcode, data.lat, data.lng)
       router.push(
         `/search?postcode=${encodeURIComponent(data.postcode)}&lat=${data.lat}&lng=${data.lng}`,
       )

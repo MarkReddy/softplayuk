@@ -4,8 +4,6 @@ import Link from 'next/link'
 import {
   Star,
   MapPin,
-  Phone,
-  Globe,
   Clock,
   Car,
   Coffee,
@@ -14,7 +12,6 @@ import {
   ShieldCheck,
   Sparkles,
   ChevronRight,
-  Share2,
   Wifi,
   Baby,
   TreePine,
@@ -26,10 +23,11 @@ import { VenueGallery } from '@/components/venue-gallery'
 import { ReviewCard } from '@/components/review-card'
 import { LeaveReviewForm } from '@/components/leave-review-form'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { getVenueBySlug, getVenueReviews } from '@/lib/db'
 import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel, getCategoryLabel, getCategoryStyle, isPublicArea } from '@/lib/data'
 import { VenueJsonLd } from '@/components/venue-jsonld'
+import { VenueViewTracker } from '@/components/venue-view-tracker'
+import { VenueActionLinks, VenueMapLink } from '@/components/venue-action-links'
 
 const amenityIconMap: Record<string, React.ReactNode> = {
   car: <Car className="h-4 w-4" />,
@@ -86,6 +84,7 @@ export default async function VenueDetailPage({
   return (
     <>
       <VenueJsonLd venue={venue} />
+      <VenueViewTracker venueId={venue.id} slug={slug} />
       <SiteHeader />
       <main className="min-h-screen">
         {/* Breadcrumb */}
@@ -303,38 +302,15 @@ export default async function VenueDetailPage({
             <aside className="lg:col-span-1">
               <div className="sticky top-20 space-y-4">
                 <div className="rounded-2xl border border-border bg-card p-5">
-                  <div className="space-y-3">
-                    {venue.phone && (
-                      <Button asChild className="w-full rounded-xl" size="lg">
-                        <a href={`tel:${venue.phone}`}>
-                          <Phone className="h-4 w-4" />
-                          Call {venue.phone}
-                        </a>
-                      </Button>
-                    )}
-                    {venue.website && (
-                      <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
-                        <a href={venue.website} target="_blank" rel="noopener noreferrer">
-                          <Globe className="h-4 w-4" />
-                          Visit website
-                        </a>
-                      </Button>
-                    )}
-                    <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
-                      <a
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <MapPin className="h-4 w-4" />
-                        Get directions
-                      </a>
-                    </Button>
-                    <Button variant="ghost" className="w-full rounded-xl" size="lg">
-                      <Share2 className="h-4 w-4" />
-                      Share venue
-                    </Button>
-                  </div>
+                  <VenueActionLinks
+                    venueId={venue.id}
+                    phone={venue.phone}
+                    website={venue.website}
+                    lat={venue.lat}
+                    lng={venue.lng}
+                    name={venue.name}
+                    postcode={venue.postcode}
+                  />
                 </div>
 
                 <div className="rounded-2xl border border-border bg-card p-5">
@@ -380,16 +356,7 @@ export default async function VenueDetailPage({
                   </h3>
                   <p className="mb-1 text-sm font-medium text-foreground">{venue.address}</p>
                   <p className="mb-4 text-sm text-muted-foreground">{venue.postcode}</p>
-                  <Button asChild variant="outline" className="w-full rounded-xl" size="lg">
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name + ', ' + venue.postcode)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <MapPin className="h-4 w-4" />
-                      Open in Google Maps
-                    </a>
-                  </Button>
+                  <VenueMapLink venueId={venue.id} name={venue.name} postcode={venue.postcode} />
                 </div>
 
                 {venue.lastRefreshedAt && venue.lastRefreshedAt !== 'undefined' && (
