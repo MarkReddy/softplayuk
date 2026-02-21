@@ -1,26 +1,25 @@
 import type { MetadataRoute } from 'next'
 import { neon } from '@neondatabase/serverless'
+import { SITE_URL } from '@/lib/site-config'
 
-const sql = neon(process.env.DATABASE_URL!)
-
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://softplayuk.com'
+const sql = neon(process.env.DATASITE_URL!)
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = []
 
   // Static pages
   entries.push(
-    { url: BASE_URL, lastModified: new Date(), changeFrequency: 'daily', priority: 1.0 },
-    { url: `${BASE_URL}/search`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
-    { url: `${BASE_URL}/regions`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
-    { url: `${BASE_URL}/blog`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
+    { url: SITE_URL, lastModified: new Date(), changeFrequency: 'daily', priority: 1.0 },
+    { url: `${SITE_URL}/search`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE_URL}/regions`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
+    { url: `${SITE_URL}/blog`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
   )
 
   // Blog category pages
   const categories = ['soft-play', 'playground', 'trampoline-park', 'adventure', 'farm']
   for (const cat of categories) {
     entries.push({
-      url: `${BASE_URL}/blog/${cat}`,
+      url: `${SITE_URL}/blog/${cat}`,
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.7,
@@ -35,7 +34,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     `
     for (const r of regions) {
       entries.push({
-        url: `${BASE_URL}/regions/${r.slug}`,
+        url: `${SITE_URL}/regions/${r.slug}`,
         lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.7,
@@ -46,7 +45,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const cities = await sql`SELECT slug FROM city_pages ORDER BY venue_count DESC`
     for (const c of cities) {
       entries.push({
-        url: `${BASE_URL}/soft-play/${c.slug}`,
+        url: `${SITE_URL}/soft-play/${c.slug}`,
         lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.6,
@@ -57,7 +56,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const blogPosts = await sql`SELECT slug, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC`
     for (const bp of blogPosts) {
       entries.push({
-        url: `${BASE_URL}/blog/post/${bp.slug}`,
+        url: `${SITE_URL}/blog/post/${bp.slug}`,
         lastModified: bp.published_at ? new Date(bp.published_at as string) : new Date(),
         changeFrequency: 'monthly',
         priority: 0.7,
@@ -71,7 +70,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     `
     for (const v of venues) {
       entries.push({
-        url: `${BASE_URL}/venue/${v.slug}`,
+        url: `${SITE_URL}/venue/${v.slug}`,
         lastModified: new Date(),
         changeFrequency: 'monthly',
         priority: 0.5,

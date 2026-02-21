@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   title: 'Soft Play Guides & Articles',
   description:
     'Expert guides for UK parents: discover the best soft play centres, trampoline parks, adventure play areas, and outdoor playgrounds region by region.',
+  alternates: {
+    canonical: '/blog',
+  },
 }
 
 interface RegionSummary {

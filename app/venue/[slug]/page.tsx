@@ -54,9 +54,13 @@ export async function generateMetadata({
   return {
     title: `${venue.name} - Soft Play in ${venue.city}`,
     description: venue.shortDescription,
+    alternates: {
+      canonical: `/venue/${slug}`,
+    },
     openGraph: {
       title: `${venue.name} - Soft Play in ${venue.city}`,
       description: venue.shortDescription,
+      url: `/venue/${slug}`,
       images: [venue.imageUrl],
     },
   }

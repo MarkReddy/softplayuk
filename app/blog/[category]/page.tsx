@@ -58,6 +58,9 @@ export async function generateMetadata({
   return {
     title: `Best ${cat.plural} in the UK`,
     description: `Find the best ${cat.plural.toLowerCase()} near you. Browse our directory of UK ${cat.plural.toLowerCase()} with real parent reviews, photos, and opening hours.`,
+    alternates: {
+      canonical: `/blog/${category}`,
+    },
   }
 }
 

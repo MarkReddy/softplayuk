@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Nunito } from 'next/font/google'
 import { CookieBanner } from '@/components/cookie-banner'
 import { AnalyticsLoader } from '@/components/analytics'
+import { SITE_URL } from '@/lib/site-config'
 
 import './globals.css'
 
@@ -11,6 +12,7 @@ const nunito = Nunito({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "UK's #1 Soft Play Finder",
     template: "%s | UK's #1 Soft Play Finder",
@@ -26,12 +28,16 @@ export const metadata: Metadata = {
     'UK soft play',
     'toddler soft play',
   ],
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'SoftPlay UK - Find the Best Soft Play Centres Near You',
     description:
       'Trusted by over 40,000 parents across more than 2,000 venues. The UK\'s most comprehensive soft play and children\'s activity site.',
     type: 'website',
     locale: 'en_GB',
+    url: SITE_URL,
   },
 }
 

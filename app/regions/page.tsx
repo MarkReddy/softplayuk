@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   title: 'Browse Soft Play by Region',
   description:
     'Explore soft play centres across every region of the United Kingdom. Find indoor play areas near you by browsing our regional directory.',
+  alternates: {
+    canonical: '/regions',
+  },
 }
 
 export default async function RegionsPage() {

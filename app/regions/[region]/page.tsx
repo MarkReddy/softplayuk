@@ -22,9 +22,13 @@ export async function generateMetadata({
   return {
     title: `Soft Play Centres in ${detail.region} - Indoor Play Areas`,
     description: `Find the best soft play centres in ${detail.region}. Browse ${detail.venueCount} venues across ${detail.cityCount} cities with trusted parent reviews.`,
+    alternates: {
+      canonical: `/regions/${region}`,
+    },
     openGraph: {
       title: `Soft Play in ${detail.region}`,
       description: `${detail.venueCount} soft play centres across ${detail.cityCount} cities in ${detail.region}.`,
+      url: `/regions/${region}`,
     },
   }
 }
