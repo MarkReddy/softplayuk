@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s | UK's #1 Soft Play Finder",
   },
   description:
-    'Discover the best soft play centres for kids across the UK. Trusted reviews, real parent insights, postcode search. Find safe, clean, fun play centres near you.',
+    'Find the best soft play centres near you. Trusted parent reviews, postcode search, filters, and venue details across the UK.',
   keywords: [
     'soft play',
     'soft play near me',
@@ -27,17 +27,34 @@ export const metadata: Metadata = {
     'indoor play area',
     'UK soft play',
     'toddler soft play',
+    'indoor play centre near me',
   ],
   alternates: {
     canonical: '/',
   },
   openGraph: {
-    title: 'SoftPlay UK - Find the Best Soft Play Centres Near You',
+    siteName: 'Softplay UK',
+    title: "UK's #1 Soft Play Finder",
     description:
-      'Trusted by over 40,000 parents across more than 2,000 venues. The UK\'s most comprehensive soft play and children\'s activity site.',
+      'Find the best soft play centres near you. Trusted parent reviews, postcode search, filters, and venue details across the UK.',
     type: 'website',
     locale: 'en_GB',
     url: SITE_URL,
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'Softplay UK - Find the Best Soft Play Near You',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "UK's #1 Soft Play Finder",
+    description:
+      'Find the best soft play centres near you. Trusted parent reviews, postcode search, filters, and venue details across the UK.',
+    images: ['/og-image.jpg'],
   },
 }
 
