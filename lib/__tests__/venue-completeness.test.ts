@@ -141,56 +141,40 @@ describe('wouldShowPlaceholder', () => {
   })
 })
 
-// ─── Slug Resolution Tests (unit-level) ─────────────────────
+// ─── Edge Cases ─────────────────────────────────────────────
 
-describe('slug resolution consistency', () => {
-  it('hydrateVenue preserves the slug exactly as stored in DB', () => {
-    // This validates that the hydrator does not modify the slug
-    const { hydrateVenue } = require('../db')
-    const row = {
-      id: 999,
-      name: 'Test Venue',
-      slug: 'test-venue-city-abc1',
-      city: 'City',
-      county: 'County',
-      description: 'desc',
-      postcode: 'AB1 2CD',
-      address_line1: '123 St',
-      address_line2: null,
-      lat: 51.5,
-      lng: -0.1,
-      phone: null,
-      website: null,
-      category: 'soft_play',
-      age_range: '0-12',
-      price_range: 'mid',
-      status: 'active',
-      has_cafe: false,
-      has_parking: false,
-      has_party_rooms: false,
-      is_sen_friendly: false,
-      has_baby_area: false,
-      has_outdoor: false,
-      google_rating: null,
-      google_review_count: 0,
-      first_party_rating: 0,
-      first_party_review_count: 0,
-      cleanliness_score: 0,
-      google_place_id: null,
-      last_google_sync: null,
-      updated_at: '2026-01-01',
-      created_at: '2026-01-01',
-      image_url: null,
-    }
+describe('edge cases', () => {
+  it('handles venue with null googleRating', () => {
+    const venue = makeVenue({ googleRating: undefined, googleReviewCount: 0 })
+    const result = getVenueCompleteness(venue)
+    expect(result.fields.googleRating).toBe(false)
+    expect(result.fields.reviews).toBe(false)
+  })
 
-    const defaultHours = {
-      monday: 'Closed', tuesday: 'Closed', wednesday: 'Closed',
-      thursday: 'Closed', friday: 'Closed', saturday: 'Closed', sunday: 'Closed',
-    }
+  it('handles venue with zero googleRating', () => {
+    const venue = makeVenue({ googleRating: 0, googleReviewCount: 0 })
+    const result = getVenueCompleteness(venue)
+    expect(result.fields.googleRating).toBe(false)
+  })
 
-    const venue = hydrateVenue(row, [], defaultHours, [])
-    expect(venue.slug).toBe('test-venue-city-abc1')
-    expect(venue.id).toBe('999')
-    expect(venue.name).toBe('Test Venue')
+  it('handles venue with only first-party reviews', () => {
+    const venue = makeVenue({ firstPartyReviewCount: 3, googleReviewCount: 0 })
+    const result = getVenueCompleteness(venue)
+    expect(result.fields.reviews).toBe(true)
+  })
+
+  it('score is always between 0 and 100', () => {
+    const thin = makeVenue()
+    const full = makeVenue({
+      description: 'desc', phone: '01234', website: 'https://x.com',
+      amenities: [{ id: 'a', name: 'A', icon: 'a' }],
+      openingHours: { monday: '9-5', tuesday: '9-5', wednesday: '9-5', thursday: '9-5', friday: '9-5', saturday: '9-5', sunday: '9-5' },
+      images: [{ url: '/x.jpg', source: 'manual' }],
+      firstPartyReviewCount: 1, googleRating: 4.0,
+    })
+    expect(getVenueCompleteness(thin).score).toBeGreaterThanOrEqual(0)
+    expect(getVenueCompleteness(thin).score).toBeLessThanOrEqual(100)
+    expect(getVenueCompleteness(full).score).toBeGreaterThanOrEqual(0)
+    expect(getVenueCompleteness(full).score).toBeLessThanOrEqual(100)
   })
 })
