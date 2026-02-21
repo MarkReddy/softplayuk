@@ -206,23 +206,18 @@ export default async function VenueDetailPage({
                 <span>{venue.address}, {venue.postcode}</span>
               </div>
 
-              {/* About */}
-              <div className="mb-8 rounded-2xl border border-border bg-card p-6">
-                <h2 className="mb-3 font-serif text-xl font-bold text-foreground">About</h2>
-                {venue.description ? (
+              {/* About -- only shown when real content exists */}
+              {venue.description && venue.description.trim().length > 0 && (
+                <div className="mb-8 rounded-2xl border border-border bg-card p-6">
+                  <h2 className="mb-3 font-serif text-xl font-bold text-foreground">About</h2>
                   <p className="leading-relaxed text-muted-foreground">{venue.description}</p>
-                ) : (
-                  <p className="leading-relaxed text-muted-foreground italic">
-                    Information about {venue.name} is being compiled. Check back soon for a full description,
-                    or visit their website for more details.
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* Facilities */}
-              <div className="mb-8 rounded-2xl border border-border bg-card p-6">
-                <h2 className="mb-4 font-serif text-xl font-bold text-foreground">Facilities</h2>
-                {venue.amenities.length > 0 ? (
+              {/* Facilities -- only shown when real data exists */}
+              {venue.amenities.length > 0 && (
+                <div className="mb-8 rounded-2xl border border-border bg-card p-6">
+                  <h2 className="mb-4 font-serif text-xl font-bold text-foreground">Facilities</h2>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                     {venue.amenities.map((amenity) => (
                       <div key={amenity.id} className="flex items-center gap-2.5 rounded-xl bg-secondary p-3">
@@ -231,12 +226,8 @@ export default async function VenueDetailPage({
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="leading-relaxed text-muted-foreground italic">
-                    Facilities information for {venue.name} is being compiled. Contact the venue directly for details about what they offer.
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Data provenance */}
               <div className="mb-8 rounded-2xl border border-border bg-secondary/50 p-5">
@@ -287,9 +278,24 @@ export default async function VenueDetailPage({
                 )}
 
                 {allReviews.length === 0 && (
-                  <p className="rounded-2xl border border-border bg-card p-6 text-center text-muted-foreground">
-                    No reviews yet. Be the first parent to review this venue!
-                  </p>
+                  <div className="rounded-2xl border border-border bg-card p-6 text-center">
+                    {venue.googleRating != null && venue.googleReviewCount != null && venue.googleReviewCount > 0 ? (
+                      <div className="mb-4">
+                        <div className="mb-2 flex items-center justify-center gap-1.5">
+                          <Star className="h-5 w-5 fill-accent text-accent" />
+                          <span className="text-lg font-bold text-foreground">{venue.googleRating.toFixed(1)}</span>
+                          <span className="text-sm text-muted-foreground">on Google ({venue.googleReviewCount} reviews)</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          No parent reviews yet. Be the first to share your experience!
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        No reviews yet. Be the first parent to review this venue!
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 <div className="mt-6">
@@ -329,8 +335,8 @@ export default async function VenueDetailPage({
                     }
                     if (allClosed) {
                       return (
-                        <p className="text-sm text-muted-foreground italic">
-                          Opening hours not yet available. Please contact the venue or check their website for current times.
+                        <p className="text-sm text-muted-foreground">
+                          Contact the venue or check their website for opening times.
                         </p>
                       )
                     }
