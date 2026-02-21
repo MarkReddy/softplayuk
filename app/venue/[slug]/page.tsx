@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getVenueBySlug, getVenueReviews } from '@/lib/db'
 import { getPriceBandLabel, getAgeLabel, getBlendedRating, getSourceLabel, getCategoryLabel, getCategoryStyle, isPublicArea } from '@/lib/data'
+import { VenueJsonLd } from '@/components/venue-jsonld'
 
 const amenityIconMap: Record<string, React.ReactNode> = {
   car: <Car className="h-4 w-4" />,
@@ -84,6 +85,7 @@ export default async function VenueDetailPage({
 
   return (
     <>
+      <VenueJsonLd venue={venue} />
       <SiteHeader />
       <main className="min-h-screen">
         {/* Breadcrumb */}
