@@ -63,6 +63,7 @@ export function AnalyticsLoader() {
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
+          window.gtag = gtag;
 
           // Check if user already consented (from localStorage)
           var hasConsent = false;
